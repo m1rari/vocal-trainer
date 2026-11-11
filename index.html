@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#121417">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Попади в ноту</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="brand-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span>Попади в ноту</span>
+      </div>
+      <div class="instrument">Альт · viola</div>
+    </header>
+
+    <main>
+      <!-- Note display -->
+      <section class="stage">
+        <div class="phase" id="phase">Нажми ▶, чтобы начать</div>
+        <button class="note-orb" id="orb" aria-label="Повторить ноту">
+          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-bg" cx="60" cy="60" r="54"/>
+            <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="54"/>
+          </svg>
+          <div class="note-main" id="noteName">—</div>
+          <div class="note-sub" id="noteSolf">&nbsp;</div>
+        </button>
+        <div class="counter" id="counter">0 нот</div>
+      </section>
+
+      <!-- Transport -->
+      <section class="transport">
+        <button class="tbtn" id="prevBtn" aria-label="Предыдущая нота">
+          <svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-10 7 10 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="tbtn tbtn-main" id="autoBtn" aria-label="Авторежим">
+          <svg class="ic-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
+          <svg class="ic-pause" viewBox="0 0 24 24"><path d="M7 4h4v16H7zM14 4h4v16h-4z" fill="currentColor"/></svg>
+        </button>
+        <button class="tbtn" id="nextBtn" aria-label="Следующая нота">
+          <svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+      </section>
+      <div class="hint" id="hint">▶ — авторежим (нота → пауза, чтобы спеть → следующая). Тап по кругу — повторить.</div>
+
+      <!-- Order -->
+      <section class="card">
+        <div class="card-title">Порядок</div>
+        <div class="seg" id="orderSeg">
+          <button data-v="up">Вверх</button>
+          <button data-v="updown">Вверх‑вниз</button>
+          <button data-v="down">Вниз</button>
+          <button data-v="random">Случайно</button>
+        </div>
+      </section>
+
+      <!-- Range -->
+      <section class="card">
+        <div class="card-title">Диапазон <span class="muted" id="rangeCount"></span></div>
+        <div class="range-row">
+          <div class="stepper">
+            <span class="stepper-lbl">от</span>
+            <button data-r="lo" data-d="-1" aria-label="Ниже">−</button>
+            <span class="stepper-val" id="loVal">F3</span>
+            <button data-r="lo" data-d="1" aria-label="Выше">+</button>
+          </div>
+          <div class="stepper">
+            <span class="stepper-lbl">до</span>
+            <button data-r="hi" data-d="-1" aria-label="Ниже">−</button>
+            <span class="stepper-val" id="hiVal">F4</span>
+            <button data-r="hi" data-d="1" aria-label="Выше">+</button>
+          </div>
+        </div>
+        <div class="kb-wrap" id="kbWrap"><div class="kb" id="kb"></div></div>
+        <label class="toggle">
+          <input type="checkbox" id="chromatic">
+          <span class="switch"></span>
+          <span>Включать диезы / бемоли (чёрные клавиши)</span>
+        </label>
+      </section>
+
+      <!-- Auto settings -->
+      <section class="card">
+        <div class="card-title">Авторежим</div>
+        <div class="opt">
+          <span>Пауза, чтобы спеть</span>
+          <div class="seg seg-sm" id="pauseSeg">
+            <button data-v="2">2 с</button>
+            <button data-v="3">3 с</button>
+            <button data-v="4">4 с</button>
+            <button data-v="6">6 с</button>
+          </div>
+        </div>
+        <div class="opt">
+          <span>Повторов ноты</span>
+          <div class="seg seg-sm" id="repSeg">
+            <button data-v="1">1</button>
+            <button data-v="2">2</button>
+            <button data-v="3">3</button>
+          </div>
+        </div>
+        <div class="opt">
+          <span>Длина звука</span>
+          <div class="seg seg-sm" id="lenSeg">
+            <button data-v="1">1 с</button>
+            <button data-v="2">2 с</button>
+            <button data-v="3">3 с</button>
+          </div>
+        </div>
+        <div class="opt">
+          <span>Названия нот</span>
+          <div class="seg seg-sm" id="namesSeg">
+            <button data-v="ru">До Ре Ми</button>
+            <button data-v="en">C D E</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        Сэмплы: FluidR3 GM (Viola), лицензия MIT. Работает офлайн после первой загрузки.<br>
+        Кнопки ⏮ ⏭ на руле / наушниках листают ноты.
+      </footer>
+    </main>
+
+    <div class="loader" id="loader">
+      <div class="loader-box">
+        <div class="spinner"></div>
+        <div id="loaderText">Загружаю звуки альта…</div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
