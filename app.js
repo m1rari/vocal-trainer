@@ -28,7 +28,7 @@
   // ---------- Settings ----------
   const DEFAULTS = {
     lo: 53, hi: 65, chromatic: false, order: 'up', pause: 4, reps: 1, len: 4, names: 'ru',
-    pattern: 'tri3', tempo: 0.7, micAdvance: true, tab: 'notes',
+    pattern: 'tri3', tempo: 0.7, micAdvance: true, micMode: 'target', micLive: true, tab: 'notes',
   };
   let S = { ...DEFAULTS };
   try {
@@ -48,7 +48,7 @@
     tabbar: $('tabbar'), vTrain: $('viewTrain'), vMic: $('viewMic'), vSettings: $('viewSettings'),
     micNote: $('micNote'), micNoteSub: $('micNoteSub'), micStatus: $('micStatus'), micDetail: $('micDetail'),
     needle: $('needle'), holdBar: $('holdBar'), micToggle: $('micToggle'), micPlay: $('micPlay'),
-    micAdvance: $('micAdvance'), micHits: $('micHits'),
+    micAdvance: $('micAdvance'), micHits: $('micHits'), graph: $('micGraph'), level: $('micLevel'), micLive: $('micLive'),
   };
 
   // =====================================================================
@@ -475,6 +475,7 @@
         save(); sync();
         if (key === 'order') dir = 1;
         if (key === 'names') { renderNote(); renderMicTarget(); }
+        if (key === 'micMode') applyMicMode();
       });
       sync();
     });
@@ -502,62 +503,89 @@
       if (!auto) idleUi();
       requestAnimationFrame(() => scrollKeyboardToRange(false));
     }
-    if (tab === 'mic') { if (cur == null) noteNext(); renderMicTarget(); }
+    if (tab === 'mic') { if (cur == null) noteNext(); applyMicMode(); }
     window.scrollTo(0, 0);
   }
 
   // =====================================================================
   // Microphone pitch check
   // =====================================================================
-  let mic = null; // { stream, src, analyser, buf, raf }
+  let mic = null; // { ctx, stream, src, analyser, buf, raf }
   let micHold = 0, micMiss = 0, micLast = 0, micHits = 0, micFrame = 0, micDone = false;
   const recent = [];
 
-  // Autocorrelation pitch detector. Returns Hz or -1.
-  function detectPitch(buf, sr) {
+  // Pitch detector (McLeod method: normalised autocorrelation, so it does not depend on
+  // how loud the microphone is). Returns Hz or -1.
+  function detectPitch(input, sr) {
+    let buf = input;
+    if (sr >= 40000) {                    // halve the rate: 4x cheaper, still accurate to a few cents
+      const h = input.length >> 1;
+      buf = new Float32Array(h);
+      for (let i = 0; i < h; i++) buf[i] = (input[2 * i] + input[2 * i + 1]) * 0.5;
+      sr /= 2;
+    }
     const n = buf.length;
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += buf[i];
+    mean /= n;
     let rms = 0;
-    for (let i = 0; i < n; i++) rms += buf[i] * buf[i];
+    for (let i = 0; i < n; i++) { const a = buf[i] - mean; rms += a * a; }
     rms = Math.sqrt(rms / n);
-    if (rms < 0.012) return -1;
-    const minLag = Math.floor(sr / 1100), maxLag = Math.min(Math.floor(sr / 70), n >> 1);
-    const c = new Float32Array(maxLag + 2);
-    for (let lag = 0; lag <= maxLag + 1; lag++) {
-      let s = 0;
-      for (let j = 0; j < n - lag; j++) s += buf[j] * buf[j + lag];
-      c[lag] = s;
+    if (rms < 0.0012) return -1;          // real silence only; quiet iPhone input still passes
+    const minLag = Math.floor(sr / 1200), maxLag = Math.min(Math.floor(sr / 65), (n >> 1) - 2);
+    const nsdf = new Float32Array(maxLag + 2);
+    for (let tau = 0; tau <= maxLag + 1; tau++) {
+      let acf = 0, m = 0;
+      for (let j = 0; j < n - tau; j++) {
+        const a = buf[j] - mean, b = buf[j + tau] - mean;
+        acf += a * b; m += a * a + b * b;
+      }
+      nsdf[tau] = m > 0 ? 2 * acf / m : 0;
     }
-    let d = 1;
-    while (d < maxLag && c[d] > c[d + 1]) d++;      // skip the zero-lag lobe
-    let best = -1, bestV = -Infinity;
-    for (let i = Math.max(d, minLag); i <= maxLag; i++) if (c[i] > bestV) { bestV = c[i]; best = i; }
-    if (best <= 0 || bestV < 0.3 * c[0]) return -1;   // not periodic enough
-    // prefer the first strong peak: avoids locking onto an octave below
-    for (let i = Math.max(d, minLag) + 1; i < best; i++) {
-      if (c[i] > 0.9 * bestV && c[i] >= c[i - 1] && c[i] >= c[i + 1]) { best = i; break; }
+    let tau = 1;
+    while (tau <= maxLag && nsdf[tau] > 0) tau++;     // skip the zero-lag lobe
+    const peaks = [];
+    let best = -1;
+    for (; tau <= maxLag; tau++) {
+      if (nsdf[tau] > 0) { if (best < 0 || nsdf[tau] > nsdf[best]) best = tau; }
+      else if (best >= 0) { if (best >= minLag) peaks.push(best); best = -1; }
     }
-    const a = c[best - 1], b = c[best], e = c[best + 1];
-    const shift = (a - 2 * b + e) ? 0.5 * (a - e) / (a - 2 * b + e) : 0;
-    return sr / (best + shift);
+    if (best >= minLag && best < maxLag && nsdf[best] >= nsdf[best + 1]) peaks.push(best);
+    if (!peaks.length) return -1;
+    let top = 0;
+    for (const p of peaks) if (nsdf[p] > top) top = nsdf[p];
+    if (top < 0.55) return -1;            // not a clear tone (noise, consonants)
+    const p = peaks.find(q => nsdf[q] >= 0.9 * top);  // first strong peak = true period, not an octave below
+    const a = nsdf[p - 1], b = nsdf[p], c = nsdf[p + 1];
+    const shift = (a - 2 * b + c) ? 0.5 * (a - c) / (a - 2 * b + c) : 0;
+    return sr / (p + shift);
   }
 
   async function startMic() {
+    let mctx = null;
     try {
-      if (ctx.state !== 'running') await ctx.resume();
+      // Own context at the device's native rate: an iPhone garbles microphone audio
+      // when it is pulled into a context with a forced sample rate.
+      mctx = new AC();
+      // Echo cancellation removes our own note from the microphone, so you can sing along with it.
+      // It also switches the iPhone to its voice-processing input, which is much louder than the raw one.
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        audio: { echoCancellation: true, autoGainControl: true, noiseSuppression: false, channelCount: 1 },
       });
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
+      if (mctx.state !== 'running') await mctx.resume();
+      const src = mctx.createMediaStreamSource(stream);
+      const analyser = mctx.createAnalyser();
+      analyser.fftSize = 4096;
       src.connect(analyser);
-      mic = { stream, src, analyser, buf: new Float32Array(analyser.fftSize), raf: 0 };
+      mic = { ctx: mctx, stream, src, analyser, buf: new Float32Array(analyser.fftSize), bytes: null, raf: 0 };
       el.micToggle.textContent = 'Выключить микрофон';
       el.micToggle.classList.add('on');
       resetHold();
+      micUi(null, isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
       micLast = performance.now();
       mic.raf = requestAnimationFrame(micTick);
     } catch (e) {
+      if (mctx) try { mctx.close(); } catch (e2) {}
       el.micStatus.textContent = 'Нет доступа к микрофону';
       el.micDetail.textContent = 'Разреши доступ в настройках браузера и попробуй ещё раз.';
     }
@@ -566,13 +594,26 @@
     if (!mic) return;
     cancelAnimationFrame(mic.raf);
     mic.stream.getTracks().forEach(t => t.stop());
-    try { mic.src.disconnect(); } catch (e) {}
+    try { mic.src.disconnect(); mic.ctx.close(); } catch (e) {}
     mic = null;
     el.micToggle.textContent = 'Включить микрофон';
     el.micToggle.classList.remove('on');
+    el.level.style.width = '0%';
     micUi(null, 'Включи микрофон и спой ноту', ' ');
   }
-  function resetHold() { micHold = 0; micMiss = 0; micDone = false; recent.length = 0; el.holdBar.style.width = '0%'; }
+  function readMic() {
+    const a = mic.analyser;
+    if (a.getFloatTimeDomainData) { a.getFloatTimeDomainData(mic.buf); return mic.buf; }
+    if (!mic.bytes) mic.bytes = new Uint8Array(a.fftSize);
+    a.getByteTimeDomainData(mic.bytes);
+    for (let i = 0; i < mic.bytes.length; i++) mic.buf[i] = (mic.bytes[i] - 128) / 128;
+    return mic.buf;
+  }
+
+  function resetHold() {
+    micHold = 0; micMiss = 0; micDone = false; recent.length = 0; trail.length = 0;
+    el.holdBar.style.width = '0%';
+  }
 
   function micUi(cents, status, detail, cls) {
     el.micStatus.textContent = status;
@@ -583,33 +624,76 @@
     el.needle.classList.toggle('ok', cls === 'ok');
   }
 
+  const isFree = () => S.micMode === 'free';
+  const semiWord = n => (n === 1 ? 'полутон' : n < 5 ? 'полутона' : 'полутонов');
+  // "how far" in plain words: cents when close, semitones when far
+  function distText(diff) {
+    const a = Math.abs(diff);
+    if (a < 0.75) return `${Math.round(a * 100)} центов`;
+    const half = Math.round(a * 2) / 2;
+    return Number.isInteger(half) ? `${half} ${semiWord(half)}` : `${String(half).replace('.', ',')} полутона`;
+  }
+
   function micTick(now) {
     if (!mic) return;
     mic.raf = requestAnimationFrame(micTick);
     const dt = Math.min(0.1, (now - micLast) / 1000);
     if (++micFrame % 2) return;           // ~30 analyses per second is plenty
     micLast = now;
-    if (micDone) return;
-    if (!audio.paused && !audio.ended) {  // don't "hear" our own speaker
+    if (mic.ctx.state !== 'running') { mic.ctx.resume().catch(() => {}); return; }  // e.g. after a phone call
+    const buf = readMic();
+    let peak = 0;
+    for (let i = 0; i < buf.length; i += 4) { const a = Math.abs(buf[i]); if (a > peak) peak = a; }
+    el.level.style.width = Math.min(100, Math.sqrt(peak) * 130) + '%';
+    if (micDone) { drawGraph(now); return; }
+    const playing = !audio.paused && !audio.ended;
+    if (playing && !S.micLive) {          // optional: ignore the mic while our own note sounds
       micUi(null, 'Слушай…', ' ');
       resetHold();
+      drawGraph(now);
       return;
     }
-    mic.analyser.getFloatTimeDomainData(mic.buf);
-    const f = detectPitch(mic.buf, ctx.sampleRate);
+    handlePitch(detectPitch(buf, mic.ctx.sampleRate), dt, now, playing);
+  }
+
+  function handlePitch(f, dt, now, playing) {
     if (f < 0) {
       micMiss += dt;
-      if (micMiss > 0.4) { micHold = 0; el.holdBar.style.width = '0%'; recent.length = 0; micUi(null, 'Спой ноту', ' '); }
+      if (micMiss > 0.4) {
+        micHold = 0; el.holdBar.style.width = '0%'; recent.length = 0;
+        if (trail.length && trail[trail.length - 1].v != null) trail.push({ t: now, v: null });
+        micUi(null, playing ? 'Пой вместе с нотой' : isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
+        if (isFree()) { el.micNote.textContent = '—'; el.micNoteSub.textContent = 'ты поёшь'; }
+      }
+      drawGraph(now);
       return;
     }
     recent.push(69 + 12 * Math.log2(f / 440));
     if (recent.length > 5) recent.shift();
     const sung = [...recent].sort((a, b) => a - b)[recent.length >> 1];
+    const hz = `${Math.round(440 * Math.pow(2, (sung - 69) / 12))} Гц`;
+
+    if (isFree()) {
+      // Free tuner: nearest note + how far you are from it
+      micMiss = 0;
+      const near = clamp(Math.round(sung), 0, 127);
+      const cents = (sung - near) * 100;
+      el.micNote.innerHTML = nameHtml(near);
+      el.micNoteSub.textContent = `ты поёшь · ${sci(near)}`;
+      trail.push({ t: now, v: sung });
+      const detail = `${cents >= 0 ? '+' : '−'}${Math.abs(Math.round(cents))} центов · ${hz}`;
+      if (Math.abs(cents) <= 15) micUi(cents * 2, 'Чисто ✓', detail, 'ok');
+      else micUi(cents * 2, cents < 0 ? 'Занижаешь — тяни вверх ↑' : 'Завышаешь — тяни вниз ↓', detail, 'off');
+      drawGraph(now);
+      return;
+    }
+
     let diff = sung - cur;
     diff -= 12 * Math.round(diff / 12);   // any octave counts
     const cents = diff * 100;
+    trail.push({ t: now, v: cur + diff });
     const sungName = (S.names === 'ru' ? RU : EN)[((Math.round(sung) % 12) + 12) % 12];
-    const detail = `Ты поёшь: ${sungName} (${cents > 0 ? '+' : ''}${Math.round(cents)} центов)`;
+    const detail = `Ты поёшь: ${sungName} · ${hz}`;
     if (Math.abs(cents) <= 30) {
       micMiss = 0;
       micHold += dt;
@@ -617,11 +701,10 @@
     } else {
       micMiss += dt;
       if (micMiss > 0.3) micHold = 0;
-      const semis = Math.round(Math.abs(diff));
-      const how = semis >= 1 ? ` на ${semis} ${semis === 1 ? 'полутон' : semis < 5 ? 'полутона' : 'полутонов'}` : ' чуть‑чуть';
-      micUi(cents, cents < 0 ? `Низко${how} — пой выше ↑` : `Высоко${how} — пой ниже ↓`, detail, 'off');
+      micUi(cents, cents < 0 ? `Ниже на ${distText(diff)} — тяни вверх ↑` : `Выше на ${distText(diff)} — тяни вниз ↓`, detail, 'off');
     }
     el.holdBar.style.width = Math.min(100, micHold / 1.0 * 100) + '%';
+    drawGraph(now);
     if (micHold >= 1.0) micHit();
   }
 
@@ -637,10 +720,82 @@
     }, 1100);
   }
 
+  // ---------- Pitch graph: where your voice is relative to the notes, over the last seconds ----------
+  const trail = [];          // { t, v } — v is a (fractional) MIDI note, null = silence
+  const GRAPH_SEC = 6;
+  let graphCenter = 57;
+  function drawGraph(now) {
+    const cv = el.graph;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    now = now || performance.now();
+    while (trail.length && now - trail[0].t > GRAPH_SEC * 1000) trail.shift();
+
+    const free = isFree();
+    let last = null;
+    for (let i = trail.length - 1; i >= 0 && !last; i--) if (trail[i].v != null) last = trail[i];
+    if (free && last) graphCenter += (last.v - graphCenter) * 0.08;   // follow the voice smoothly
+    const center = free ? graphCenter : (cur == null ? 57 : cur);
+    const half = free ? 3.5 : 6.6;
+    const padL = 38, padR = 14;
+    const y = v => h / 2 - (v - center) / half * (h / 2);
+    const x = t => padL + (w - padL - padR) * (1 - (now - t) / (GRAPH_SEC * 1000));
+    const names = S.names === 'ru' ? RU : EN;
+
+    if (!free && cur != null) {           // green target band
+      g.fillStyle = 'rgba(74,222,128,.16)';
+      g.fillRect(padL, y(cur + 0.3), w - padL, y(cur - 0.3) - y(cur + 0.3));
+    }
+    g.font = '600 10.5px system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.lineWidth = 1;
+    for (let m = Math.ceil(center - half); m <= Math.floor(center + half); m++) {
+      const yy = Math.round(y(m)) + 0.5;
+      const isTarget = !free && m === cur;
+      g.strokeStyle = isTarget ? 'rgba(74,222,128,.7)' : 'rgba(255,255,255,.07)';
+      g.beginPath(); g.moveTo(padL, yy); g.lineTo(w, yy); g.stroke();
+      g.fillStyle = isTarget ? '#4ade80' : '#6f7c86';
+      g.fillText(names[((m % 12) + 12) % 12], 6, yy);
+    }
+
+    // voice trail
+    const good = v => (free ? Math.abs(v - Math.round(v)) <= 0.15 : Math.abs(v - cur) <= 0.3);
+    g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (let i = 1; i < trail.length; i++) {
+      const a = trail[i - 1], b = trail[i];
+      if (a.v == null || b.v == null || b.t - a.t > 300) continue;
+      g.strokeStyle = good(b.v) ? '#4ade80' : '#ffb547';
+      g.beginPath(); g.moveTo(x(a.t), clamp(y(a.v), 3, h - 3)); g.lineTo(x(b.t), clamp(y(b.v), 3, h - 3)); g.stroke();
+    }
+    const tip = trail[trail.length - 1];
+    if (tip && tip.v != null && now - tip.t < 300) {
+      const ok = good(tip.v);
+      const ty = clamp(y(tip.v), 6, h - 6);
+      g.fillStyle = ok ? '#4ade80' : '#ffb547';
+      g.beginPath(); g.arc(x(tip.t), ty, 6, 0, Math.PI * 2); g.fill();
+      if (!free && !ok) {                 // arrow pointing towards the target
+        const up = tip.v < cur, ax = x(tip.t), s = up ? -1 : 1, ay = ty + s * 12;
+        g.beginPath(); g.moveTo(ax, ay + s * 9); g.lineTo(ax - 6, ay); g.lineTo(ax + 6, ay); g.closePath(); g.fill();
+      }
+    }
+  }
+
+  function applyMicMode() {
+    document.body.dataset.mic = S.micMode;
+    resetHold();
+    renderMicTarget();
+    micUi(null, !mic ? 'Включи микрофон и спой ноту' : isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
+  }
+
   function renderMicTarget() {
-    if (cur == null) return;
-    el.micNote.innerHTML = nameHtml(cur);
-    el.micNoteSub.textContent = `цель · ${sci(cur)}`;
+    if (isFree()) { el.micNote.textContent = '—'; el.micNoteSub.textContent = 'ты поёшь'; }
+    else if (cur != null) { el.micNote.innerHTML = nameHtml(cur); el.micNoteSub.textContent = `цель · ${sci(cur)}`; }
+    drawGraph();
   }
   function micStep(d) {
     unlock();
@@ -706,6 +861,8 @@
   $('micNext').addEventListener('click', () => micStep(1));
   el.micAdvance.checked = S.micAdvance;
   el.micAdvance.addEventListener('change', () => { S.micAdvance = el.micAdvance.checked; save(); });
+  el.micLive.checked = S.micLive;
+  el.micLive.addEventListener('change', () => { S.micLive = el.micLive.checked; save(); });
 
   document.addEventListener('keydown', e => {
     if (S.tab !== 'notes' && S.tab !== 'chant') return;
@@ -722,7 +879,7 @@
   bindMediaSession();
   setTab(S.tab in TITLES ? S.tab : 'notes');
 
-  window.__vt = { detectPitch, pcm, loopOf, get SR() { return SR; }, audio };
+  window.__vt = { detectPitch, handlePitch, trail, pcm, loopOf, get SR() { return SR; }, audio };
 
   loadSamples()
     .then(() => {

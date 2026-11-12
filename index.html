@@ -109,13 +109,17 @@
 
     <!-- ===== Mic view ===== -->
     <main class="view" id="viewMic" hidden>
+      <div class="seg mic-mode" data-seg="micMode">
+        <button data-v="target">Попасть в ноту</button>
+        <button data-v="free">Свободный тюнер</button>
+      </div>
       <section class="mic-target">
-        <button class="tbtn tbtn-sm" id="micPrev" aria-label="Нота ниже">−</button>
+        <button class="tbtn tbtn-sm only-target" id="micPrev" aria-label="Нота ниже">−</button>
         <div class="mic-note">
           <div class="mic-note-name" id="micNote">—</div>
           <div class="mic-note-sub" id="micNoteSub">цель</div>
         </div>
-        <button class="tbtn tbtn-sm" id="micNext" aria-label="Нота выше">+</button>
+        <button class="tbtn tbtn-sm only-target" id="micNext" aria-label="Нота выше">+</button>
       </section>
 
       <section class="gauge-card">
@@ -127,16 +131,26 @@
         </div>
         <div class="gauge-labels"><span>ниже</span><span>точно</span><span>выше</span></div>
         <div class="gauge-detail" id="micDetail">&nbsp;</div>
-        <div class="hold"><div class="hold-bar" id="holdBar"></div></div>
+        <canvas class="graph" id="micGraph"></canvas>
+        <div class="level-row"><span>микрофон</span><div class="level"><div class="level-bar" id="micLevel"></div></div></div>
+        <div class="hold only-target"><div class="hold-bar" id="holdBar"></div></div>
       </section>
 
       <section class="mic-actions">
-        <button class="btn" id="micPlay">▶ Сыграть ноту</button>
+        <button class="btn only-target" id="micPlay">▶ Сыграть ноту</button>
         <button class="btn btn-accent" id="micToggle">Включить микрофон</button>
       </section>
 
-      <section class="card">
+      <section class="card only-free">
+        <div class="card-note">Пой любую ноту: сверху видно, какая это нота, стрелка показывает, чисто ли ты её держишь, а на графике — как голос движется между нотами.</div>
+      </section>
+      <section class="card only-target">
         <label class="toggle">
+          <input type="checkbox" id="micLive">
+          <span class="switch"></span>
+          <span>Слушать голос, пока звучит нота</span>
+        </label>
+        <label class="toggle mt-s">
           <input type="checkbox" id="micAdvance">
           <span class="switch"></span>
           <span>После попадания — следующая нота</span>
@@ -186,7 +200,7 @@
         </div>
       </section>
       <footer class="foot">
-        Сэмплы: FluidR3 GM (Viola), лицензия MIT.<br>Работает офлайн после первой загрузки. Версия 2.
+        Сэмплы: FluidR3 GM (Viola), лицензия MIT.<br>Работает офлайн после первой загрузки. Версия 3.
       </footer>
     </main>
 

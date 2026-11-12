@@ -1,5 +1,5 @@
 // Offline cache: app shell + all viola samples.
-const VERSION = 'vt-v2';
+const VERSION = 'vt-v3';
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const SAMPLES = [];
 for (let o = 3; o <= 5; o++) for (const n of NAMES) SAMPLES.push(`sounds/viola/${n}${o}.mp3`);
