@@ -1,5 +1,5 @@
 // Offline cache: app shell + all viola samples.
-const VERSION = 'vt-v1';
+const VERSION = 'vt-v2';
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const SAMPLES = [];
 for (let o = 3; o <= 5; o++) for (const n of NAMES) SAMPLES.push(`sounds/viola/${n}${o}.mp3`);
@@ -28,7 +28,7 @@ self.addEventListener('fetch', e => {
     return;
   }
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request.url, { cache: 'no-cache' }) // always revalidate so app updates arrive at once
       .then(res => {
         const copy = res.clone();
         caches.open(VERSION).then(c => c.put(e.request, copy));
