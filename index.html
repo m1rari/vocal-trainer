@@ -2,231 +2,315 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#121417">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0b09">
+  <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Попади в ноту">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Попади в ноту</title>
+  <meta name="description" content="Тренажёр вокала на альте: слушай ноту, повторяй голосом, проверяй попадание микрофоном.">
+  <title>Попади в ноту — тренажёр вокала</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preload" href="fonts/golos-text-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/lora-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#viewTitle">К содержимому</a>
   <div class="app">
-    <header class="top">
+    <header class="app-head">
       <div class="brand">
-        <svg class="brand-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-        <span id="viewTitle">Ноты</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </span>
+        <span class="brand-name">Попади в ноту</span>
       </div>
-      <div class="instrument">Альт · viola</div>
+
+      <nav class="tabbar" id="tabbar" aria-label="Разделы">
+        <button data-tab="notes" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l10-2v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          <span>Ноты</span>
+        </button>
+        <button data-tab="chant">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18l5-6 4 3 4-8 5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Распевки</span>
+        </button>
+        <button data-tab="mic">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>Микрофон</span>
+        </button>
+        <button data-tab="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          <span>Настройки</span>
+        </button>
+      </nav>
+
+      <div class="instrument">Альт<span class="inst-div">·</span>viola</div>
     </header>
+
+    <div class="page-head">
+      <h1 class="view-title" id="viewTitle">Ноты</h1>
+      <p class="view-lede" id="viewLede">Слушай ноту и повторяй голосом — в своём диапазоне, без спешки.</p>
+    </div>
 
     <!-- ===== Trainer view (tabs: Ноты / Распевки) ===== -->
     <main class="view" id="viewTrain">
-      <section class="stage">
-        <div class="phase" id="phase">Нажми ▶, чтобы начать</div>
-        <button class="note-orb" id="orb" aria-label="Повторить">
-          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
-            <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="54"/>
-          </svg>
-          <div class="note-main" id="noteName">—</div>
-          <div class="note-sub" id="noteSolf">&nbsp;</div>
-        </button>
-        <div class="counter" id="counter">&nbsp;</div>
-      </section>
+      <div class="train-grid">
+        <section class="stage">
+          <div class="phase" id="phase" aria-live="polite">Нажми ▶, чтобы начать</div>
 
-      <section class="transport">
-        <button class="tbtn" id="prevBtn" aria-label="Назад">
-          <svg viewBox="0 0 24 24"><path d="M6 5v14M19 5l-10 7 10 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="tbtn tbtn-main" id="autoBtn" aria-label="Авторежим">
-          <svg class="ic-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
-          <svg class="ic-pause" viewBox="0 0 24 24"><path d="M7 4h4v16H7zM14 4h4v16h-4z" fill="currentColor"/></svg>
-        </button>
-        <button class="tbtn" id="nextBtn" aria-label="Вперёд">
-          <svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        </button>
-      </section>
-      <div class="hint" id="hint"></div>
+          <button class="note-orb" id="orb" aria-label="Повторить ноту">
+            <span class="orb-ticks" aria-hidden="true"></span>
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="ring-track" cx="60" cy="60" r="54"/>
+              <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="54"/>
+            </svg>
+            <span class="orb-core">
+              <span class="note-main" id="noteName">—</span>
+              <span class="note-sub" id="noteSolf">&nbsp;</span>
+            </span>
+          </button>
+          <div class="counter" id="counter">&nbsp;</div>
 
-      <!-- Notes mode -->
-      <section class="card only-notes">
-        <div class="card-title">Длина ноты</div>
-        <div class="seg" data-seg="len" data-num>
-          <button data-v="2">2 с</button>
-          <button data-v="4">4 с</button>
-          <button data-v="6">6 с</button>
-          <button data-v="8">8 с</button>
-          <button data-v="12">12 с</button>
-        </div>
-        <div class="card-title mt">Порядок</div>
-        <div class="seg" data-seg="order">
-          <button data-v="up">Вверх</button>
-          <button data-v="updown">Вверх‑вниз</button>
-          <button data-v="down">Вниз</button>
-          <button data-v="random">Случайно</button>
-        </div>
-      </section>
-
-      <!-- Chant mode -->
-      <section class="card only-chant">
-        <div class="card-title">Распевка</div>
-        <div class="list" id="patternList"></div>
-        <div class="card-title mt">Темп</div>
-        <div class="seg" data-seg="tempo" data-num>
-          <button data-v="1">Медленно</button>
-          <button data-v="0.7">Средне</button>
-          <button data-v="0.45">Быстро</button>
-        </div>
-      </section>
-
-      <!-- Range (shared) -->
-      <section class="card">
-        <div class="card-title">Диапазон <span class="muted" id="rangeCount"></span></div>
-        <div class="range-row">
-          <div class="stepper">
-            <span class="stepper-lbl">от</span>
-            <button data-r="lo" data-d="-1" aria-label="Ниже">−</button>
-            <span class="stepper-val" id="loVal">F3</span>
-            <button data-r="lo" data-d="1" aria-label="Выше">+</button>
+          <div class="transport">
+            <button class="tbtn" id="prevBtn" aria-label="Предыдущая нота">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 5l-10 7 10 7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="tbtn tbtn-main" id="autoBtn" aria-label="Авторежим">
+              <svg class="ic-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
+              <svg class="ic-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h4v16H7zM14 4h4v16h-4z" fill="currentColor"/></svg>
+            </button>
+            <button class="tbtn" id="nextBtn" aria-label="Следующая нота">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M5 5l10 7-10 7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </button>
           </div>
-          <div class="stepper">
-            <span class="stepper-lbl">до</span>
-            <button data-r="hi" data-d="-1" aria-label="Ниже">−</button>
-            <span class="stepper-val" id="hiVal">F4</span>
-            <button data-r="hi" data-d="1" aria-label="Выше">+</button>
-          </div>
+
+          <p class="hint" id="hint"></p>
+        </section>
+
+        <div class="panel-stack">
+          <!-- Notes mode -->
+          <section class="panel only-notes" aria-label="Настройки нот">
+            <div class="field">
+              <span class="field-label">Длина ноты</span>
+              <div class="seg" data-seg="len" data-num>
+                <button data-v="2">2 с</button>
+                <button data-v="4">4 с</button>
+                <button data-v="6">6 с</button>
+                <button data-v="8">8 с</button>
+                <button data-v="12">12 с</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">Порядок</span>
+              <div class="seg" data-seg="order">
+                <button data-v="up">Вверх</button>
+                <button data-v="updown">Вверх‑вниз</button>
+                <button data-v="down">Вниз</button>
+                <button data-v="random">Случайно</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Chant mode -->
+          <section class="panel only-chant" aria-label="Распевка">
+            <div class="field">
+              <span class="field-label">Распевка</span>
+              <div class="list" id="patternList"></div>
+            </div>
+            <div class="field">
+              <span class="field-label">Темп</span>
+              <div class="seg" data-seg="tempo" data-num>
+                <button data-v="1">Медленно</button>
+                <button data-v="0.7">Средне</button>
+                <button data-v="0.45">Быстро</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Range (shared) -->
+          <section class="panel panel-range" aria-label="Диапазон">
+            <div class="field-head">
+              <span class="field-label">Диапазон</span>
+              <span class="count-chip" id="rangeCount"></span>
+            </div>
+            <div class="range-row">
+              <div class="stepper">
+                <span class="stepper-lbl">от</span>
+                <button data-r="lo" data-d="-1" aria-label="Ниже">−</button>
+                <span class="stepper-val" id="loVal">F3</span>
+                <button data-r="lo" data-d="1" aria-label="Выше">+</button>
+              </div>
+              <div class="stepper">
+                <span class="stepper-lbl">до</span>
+                <button data-r="hi" data-d="-1" aria-label="Ниже">−</button>
+                <span class="stepper-val" id="hiVal">F4</span>
+                <button data-r="hi" data-d="1" aria-label="Выше">+</button>
+              </div>
+            </div>
+            <div class="kb-wrap" id="kbWrap"><div class="kb" id="kb"></div></div>
+            <label class="toggle only-notes">
+              <input type="checkbox" id="chromatic">
+              <span class="switch" aria-hidden="true"></span>
+              <span>Диезы и бемоли — чёрные клавиши</span>
+            </label>
+          </section>
         </div>
-        <div class="kb-wrap" id="kbWrap"><div class="kb" id="kb"></div></div>
-        <label class="toggle only-notes">
-          <input type="checkbox" id="chromatic">
-          <span class="switch"></span>
-          <span>Включать диезы / бемоли (чёрные клавиши)</span>
-        </label>
-      </section>
+      </div>
     </main>
 
     <!-- ===== Mic view ===== -->
     <main class="view" id="viewMic" hidden>
-      <div class="seg mic-mode" data-seg="micMode">
-        <button data-v="target">Попасть в ноту</button>
-        <button data-v="free">Свободный тюнер</button>
+      <div class="mic-grid">
+        <section class="tuner" aria-label="Проверка попадания">
+          <div class="seg mic-mode" data-seg="micMode">
+            <button data-v="target">Попасть в ноту</button>
+            <button data-v="free">Свободный тюнер</button>
+          </div>
+
+          <div class="mic-target">
+            <button class="tbtn tbtn-sm only-target" id="micPrev" aria-label="Нота ниже">−</button>
+            <div class="mic-note">
+              <div class="mic-note-name" id="micNote">—</div>
+              <div class="mic-note-sub" id="micNoteSub">цель</div>
+            </div>
+            <button class="tbtn tbtn-sm only-target" id="micNext" aria-label="Нота выше">+</button>
+          </div>
+
+          <section class="gauge-card">
+            <div class="gauge-status" id="micStatus" aria-live="polite">Включи микрофон и спой ноту</div>
+            <div class="gauge" aria-hidden="true">
+              <div class="gauge-ticks"></div>
+              <div class="gauge-zone"></div>
+              <div class="gauge-center"></div>
+              <div class="gauge-needle" id="needle"></div>
+            </div>
+            <div class="gauge-scale" aria-hidden="true"><span>−100</span><span>−50</span><span>0</span><span>+50</span><span>+100</span></div>
+            <div class="gauge-labels" aria-hidden="true"><span>ниже</span><span>точно</span><span>выше</span></div>
+            <div class="gauge-detail" id="micDetail">&nbsp;</div>
+
+            <div class="hold-row only-target">
+              <span>Держи ноту</span>
+              <div class="hold"><div class="hold-bar" id="holdBar"></div></div>
+            </div>
+
+            <div class="level-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span>микрофон</span>
+              <div class="level"><div class="level-bar" id="micLevel"></div></div>
+            </div>
+          </section>
+
+          <div class="mic-actions">
+            <button class="btn only-target" id="micPlay">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
+              Сыграть ноту
+            </button>
+            <button class="btn btn-accent" id="micToggle">Включить микрофон</button>
+          </div>
+        </section>
+
+        <div class="mic-side">
+          <section class="graph-card" aria-label="Движение голоса">
+            <div class="graph-head">
+              <span>Твой голос</span>
+              <span class="graph-meta">последние 6 с</span>
+            </div>
+            <canvas class="graph" id="micGraph"></canvas>
+          </section>
+
+          <section class="card only-free">
+            <p class="card-note">Пой любую ноту: сверху видно, какая это нота, стрелка показывает, чисто ли ты её держишь, а на графике — как голос движется между нотами.</p>
+          </section>
+
+          <section class="card only-target" aria-label="Настройки микрофона">
+            <label class="toggle">
+              <input type="checkbox" id="micLive">
+              <span class="switch" aria-hidden="true"></span>
+              <span>Слушать голос, пока звучит нота</span>
+            </label>
+            <label class="toggle mt-s">
+              <input type="checkbox" id="micAdvance">
+              <span class="switch" aria-hidden="true"></span>
+              <span>После попадания — следующая нота</span>
+            </label>
+            <p class="card-note">Удержи ноту в зелёной зоне ~1 секунду. Октава не важна: можно петь на октаву выше или ниже. Попаданий: <b id="micHits">0</b></p>
+          </section>
+        </div>
       </div>
-      <section class="mic-target">
-        <button class="tbtn tbtn-sm only-target" id="micPrev" aria-label="Нота ниже">−</button>
-        <div class="mic-note">
-          <div class="mic-note-name" id="micNote">—</div>
-          <div class="mic-note-sub" id="micNoteSub">цель</div>
-        </div>
-        <button class="tbtn tbtn-sm only-target" id="micNext" aria-label="Нота выше">+</button>
-      </section>
-
-      <section class="gauge-card">
-        <div class="gauge-status" id="micStatus">Включи микрофон и спой ноту</div>
-        <div class="gauge">
-          <div class="gauge-zone"></div>
-          <div class="gauge-center"></div>
-          <div class="gauge-needle" id="needle"></div>
-        </div>
-        <div class="gauge-labels"><span>ниже</span><span>точно</span><span>выше</span></div>
-        <div class="gauge-detail" id="micDetail">&nbsp;</div>
-        <canvas class="graph" id="micGraph"></canvas>
-        <div class="level-row"><span>микрофон</span><div class="level"><div class="level-bar" id="micLevel"></div></div></div>
-        <div class="hold only-target"><div class="hold-bar" id="holdBar"></div></div>
-      </section>
-
-      <section class="mic-actions">
-        <button class="btn only-target" id="micPlay">▶ Сыграть ноту</button>
-        <button class="btn btn-accent" id="micToggle">Включить микрофон</button>
-      </section>
-
-      <section class="card only-free">
-        <div class="card-note">Пой любую ноту: сверху видно, какая это нота, стрелка показывает, чисто ли ты её держишь, а на графике — как голос движется между нотами.</div>
-      </section>
-      <section class="card only-target">
-        <label class="toggle">
-          <input type="checkbox" id="micLive">
-          <span class="switch"></span>
-          <span>Слушать голос, пока звучит нота</span>
-        </label>
-        <label class="toggle mt-s">
-          <input type="checkbox" id="micAdvance">
-          <span class="switch"></span>
-          <span>После попадания — следующая нота</span>
-        </label>
-        <div class="card-note">Удержи ноту в зелёной зоне ~1 секунду. Октава не важна: можно петь на октаву выше или ниже. Попаданий: <b id="micHits">0</b></div>
-      </section>
     </main>
 
     <!-- ===== Settings view ===== -->
     <main class="view" id="viewSettings" hidden>
-      <section class="card">
-        <div class="card-title">Авторежим</div>
-        <div class="opt">
-          <span>Пауза, чтобы спеть</span>
-          <div class="seg seg-sm" data-seg="pause" data-num>
-            <button data-v="2">2 с</button>
-            <button data-v="4">4 с</button>
-            <button data-v="6">6 с</button>
-            <button data-v="8">8 с</button>
-            <button data-v="12">12 с</button>
+      <div class="settings-grid">
+        <section class="card" aria-label="Авторежим">
+          <div class="card-title">Авторежим</div>
+          <div class="opt">
+            <span>Пауза, чтобы спеть</span>
+            <div class="seg seg-sm" data-seg="pause" data-num>
+              <button data-v="2">2 с</button>
+              <button data-v="4">4 с</button>
+              <button data-v="6">6 с</button>
+              <button data-v="8">8 с</button>
+              <button data-v="12">12 с</button>
+            </div>
           </div>
-        </div>
-        <div class="opt">
-          <span>Повторов ноты</span>
-          <div class="seg seg-sm" data-seg="reps" data-num>
-            <button data-v="1">1</button>
-            <button data-v="2">2</button>
-            <button data-v="3">3</button>
+          <div class="opt">
+            <span>Повторов ноты</span>
+            <div class="seg seg-sm" data-seg="reps" data-num>
+              <button data-v="1">1</button>
+              <button data-v="2">2</button>
+              <button data-v="3">3</button>
+            </div>
           </div>
-        </div>
-      </section>
-      <section class="card">
-        <div class="card-title">Отображение</div>
-        <div class="opt">
-          <span>Названия нот</span>
-          <div class="seg seg-sm" data-seg="names">
-            <button data-v="ru">До Ре Ми</button>
-            <button data-v="en">C D E</button>
-          </div>
-        </div>
-      </section>
-      <section class="card">
-        <div class="card-title">В машине</div>
-        <div class="card-note">
-          Запусти авторежим ▶ до поездки — дальше приложение играет само, как музыкальный плеер, в том числе с выключенным экраном.<br>
-          Кнопки ⏮ ⏭ на руле / CarPlay листают ноты, ⏯ ставит на паузу.
-        </div>
-      </section>
-      <footer class="foot">
-        Сэмплы: FluidR3 GM (Viola), лицензия MIT.<br>Работает офлайн после первой загрузки. Версия 3.
-      </footer>
-    </main>
+        </section>
 
-    <nav class="tabbar" id="tabbar">
-      <button data-tab="notes">
-        <svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-        <span>Ноты</span>
-      </button>
-      <button data-tab="chant">
-        <svg viewBox="0 0 24 24"><path d="M3 18l5-6 4 3 4-8 5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Распевки</span>
-      </button>
-      <button data-tab="mic">
-        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0014 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <span>Микрофон</span>
-      </button>
-      <button data-tab="settings">
-        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-        <span>Настройки</span>
-      </button>
-    </nav>
+        <section class="card" aria-label="Отображение">
+          <div class="card-title">Отображение</div>
+          <div class="opt">
+            <span>Названия нот</span>
+            <div class="seg seg-sm" data-seg="names">
+              <button data-v="ru">До Ре Ми</button>
+              <button data-v="en">C D E</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="В машине">
+          <div class="card-title">В машине</div>
+          <div class="card-note">
+            Запусти авторежим ▶ до поездки — дальше приложение играет само, как музыкальный плеер, в том числе с выключенным экраном.<br>
+            Кнопки ⏮ ⏭ на руле и CarPlay листают ноты, ⏯ ставит на паузу.
+          </div>
+        </section>
+
+        <section class="card keys-card" aria-label="Клавиши">
+          <div class="card-title">Клавиши</div>
+          <dl class="keys">
+            <div><dt><kbd>Space</kbd></dt><dd>Пуск и пауза авторежима</dd></div>
+            <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Предыдущая и следующая нота</dd></div>
+            <div><dt><kbd>Enter</kbd></dt><dd>Повторить ноту</dd></div>
+          </dl>
+          <p class="card-note keys-note">Работают на экранах «Ноты» и «Распевки».</p>
+        </section>
+
+        <footer class="foot">
+          <span>Сэмплы: FluidR3 GM (Viola), лицензия MIT.</span>
+          <span>Работает офлайн после первой загрузки.</span>
+          <span>Версия 3.</span>
+        </footer>
+      </div>
+    </main>
 
     <div class="loader" id="loader">
       <div class="loader-box">
-        <div class="spinner"></div>
+        <span class="loader-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </span>
         <div id="loaderText">Загружаю звуки альта…</div>
+        <div class="loader-track" aria-hidden="true"><i></i></div>
       </div>
     </div>
   </div>

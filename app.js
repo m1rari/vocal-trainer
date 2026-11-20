@@ -18,12 +18,29 @@
     { id: 'semi', name: 'Полутон', deg: 'нота – выше – нота', off: [0, 1, 0] },
   ];
   const TITLES = { notes: 'Ноты', chant: 'Распевки', mic: 'Микрофон', settings: 'Настройки' };
+  const LEDES = {
+    notes: 'Слушай ноту и повторяй голосом — в своём диапазоне, без спешки.',
+    chant: 'Короткие распевки по ступеням: инструмент играет, ты отвечаешь.',
+    mic: 'Микрофон слушает тебя и показывает, насколько точно ты попадаешь в ноту.',
+    settings: 'Авторежим, названия нот и поведение в машине.',
+  };
+  const WHITE_NAMES = {
+    ru: ['До', 'Ре', 'Ми', 'Фа', 'Соль', 'Ля', 'Си'],
+    en: ['C', 'D', 'E', 'F', 'G', 'A', 'B'],
+  };
 
   const isBlack = m => BLACK.has(m % 12);
   const octave = m => Math.floor(m / 12) - 1;
   const fileOf = m => `sounds/viola/${FILE_NAMES[m % 12]}${octave(m)}.mp3`;
   const sci = m => `${EN[m % 12]}${octave(m)}`;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const plural = (n, forms) => {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return forms[2];
+    if (b > 1 && b < 5) return forms[1];
+    if (b === 1) return forms[0];
+    return forms[2];
+  };
 
   // ---------- Settings ----------
   const DEFAULTS = {
@@ -41,7 +58,7 @@
   // ---------- DOM ----------
   const $ = id => document.getElementById(id);
   const el = {
-    title: $('viewTitle'), phase: $('phase'), orb: $('orb'), ring: $('ringFg'), name: $('noteName'), solf: $('noteSolf'),
+    title: $('viewTitle'), lede: $('viewLede'), phase: $('phase'), orb: $('orb'), ring: $('ringFg'), name: $('noteName'), solf: $('noteSolf'),
     counter: $('counter'), prev: $('prevBtn'), next: $('nextBtn'), auto: $('autoBtn'), hint: $('hint'),
     lo: $('loVal'), hi: $('hiVal'), count: $('rangeCount'), kb: $('kb'), kbWrap: $('kbWrap'),
     chromatic: $('chromatic'), loader: $('loader'), loaderText: $('loaderText'), patterns: $('patternList'),
@@ -171,6 +188,7 @@
     activeUrl = URL.createObjectURL(renderWav(spec.events, spec.dur));
     activeSpec = spec;
     lastSeg = null; lastHl = undefined;
+    if (spec.segs && spec.segs[0]) setPhase(spec.segs[0].kind, spec.segs[0].label);
     audio.src = activeUrl;
     const p = audio.play();
     if (p) p.catch(() => {});
@@ -384,10 +402,13 @@
     const base = chant ? chRoot : cur;
     if (base == null) {
       el.name.textContent = '—';
-      el.solf.textContent = chant ? `${pattern().name} · ${pattern().deg}` : ' ';
+      el.solf.textContent = chant
+        ? `${pattern().name} · ${pattern().deg}`
+        : `диапазон ${sci(S.lo)} — ${sci(S.hi)}`;
       return;
     }
     const m = sounding != null ? sounding : base;
+    el.orb.setAttribute('aria-label', chant ? `Повторить распевку от ${sci(base)}` : `Повторить ноту ${sci(base)}`);
     el.name.innerHTML = nameHtml(m);
     if (chant) el.solf.textContent = `${pattern().name} от ${sci(chRoot)}`;
     else el.solf.textContent = S.names === 'ru' ? `${sci(m)} · ${OCT_RU[octave(m)] || ''}` : `${RU[m % 12]} · ${OCT_RU[octave(m)] || ''}`;
@@ -400,11 +421,24 @@
   function renderRange() {
     el.lo.textContent = sci(S.lo);
     el.hi.textContent = sci(S.hi);
-    el.count.textContent = mode() === 'chant' ? '' : `· ${pool().length} нот`;
+    const n = pool().length;
+    el.count.textContent = mode() === 'chant' ? '' : `${n} ${plural(n, ['нота', 'ноты', 'нот'])}`;
     el.chromatic.checked = S.chromatic;
   }
 
   const KEY_W = 40;
+  const WHITE_IDX = [0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6];
+  function whiteLabel(m) {
+    const names = WHITE_NAMES[S.names === 'ru' ? 'ru' : 'en'];
+    const letter = names[WHITE_IDX[m % 12]] || '';
+    return m % 12 === 0 ? `${letter}${octave(m)}` : letter;
+  }
+  function relabelKeyboard() {
+    for (const k of el.kb.children) {
+      const m = +k.dataset.m;
+      if (!isBlack(m)) k.textContent = whiteLabel(m);
+    }
+  }
   function buildKeyboard() {
     el.kb.innerHTML = '';
     let wi = 0;
@@ -412,7 +446,7 @@
       const k = document.createElement('div');
       k.dataset.m = m;
       if (isBlack(m)) { k.className = 'bk'; k.style.left = (wi * KEY_W - 14) + 'px'; }
-      else { k.className = 'wk'; k.textContent = m % 12 === 0 ? sci(m) : ''; wi++; }
+      else { k.className = 'wk'; k.textContent = whiteLabel(m); wi++; }
       el.kb.appendChild(k);
     }
     // click (not pointerdown) so that scrolling the keyboard does not trigger notes
@@ -474,7 +508,7 @@
         S[key] = parse(b.dataset.v);
         save(); sync();
         if (key === 'order') dir = 1;
-        if (key === 'names') { renderNote(); renderMicTarget(); }
+        if (key === 'names') { renderNote(); renderMicTarget(); relabelKeyboard(); }
         if (key === 'micMode') applyMicMode();
       });
       sync();
@@ -490,11 +524,17 @@
     if (S.tab === 'mic' && tab !== 'mic') stopMic();
     if (tab !== 'settings') { S.tab = tab; save(); }
     el.title.textContent = TITLES[tab];
+    el.lede.textContent = LEDES[tab];
     el.vTrain.hidden = !isTrain;
     el.vMic.hidden = tab !== 'mic';
     el.vSettings.hidden = tab !== 'settings';
     document.body.dataset.mode = isTrain ? tab : '';
-    el.tabbar.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.body.dataset.tab = tab;
+    el.tabbar.querySelectorAll('button').forEach(b => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
     if (isTrain) {
       el.hint.textContent = tab === 'chant'
         ? '▶ — распевка сама поднимается по полутону и спускается обратно. После каждой — пауза, чтобы повторить.'
@@ -742,24 +782,24 @@
     if (free && last) graphCenter += (last.v - graphCenter) * 0.08;   // follow the voice smoothly
     const center = free ? graphCenter : (cur == null ? 57 : cur);
     const half = free ? 3.5 : 6.6;
-    const padL = 38, padR = 14;
+    const padL = 44, padR = 14;
     const y = v => h / 2 - (v - center) / half * (h / 2);
     const x = t => padL + (w - padL - padR) * (1 - (now - t) / (GRAPH_SEC * 1000));
     const names = S.names === 'ru' ? RU : EN;
 
     if (!free && cur != null) {           // green target band
-      g.fillStyle = 'rgba(74,222,128,.16)';
+      g.fillStyle = 'rgba(123,211,166,.2)';
       g.fillRect(padL, y(cur + 0.3), w - padL, y(cur - 0.3) - y(cur + 0.3));
     }
-    g.font = '600 10.5px system-ui, sans-serif';
+    g.font = '600 11px "Golos Text", system-ui, sans-serif';
     g.textBaseline = 'middle';
     g.lineWidth = 1;
     for (let m = Math.ceil(center - half); m <= Math.floor(center + half); m++) {
       const yy = Math.round(y(m)) + 0.5;
       const isTarget = !free && m === cur;
-      g.strokeStyle = isTarget ? 'rgba(74,222,128,.7)' : 'rgba(255,255,255,.07)';
+      g.strokeStyle = isTarget ? 'rgba(123,211,166,.7)' : 'rgba(242,236,225,.07)';
       g.beginPath(); g.moveTo(padL, yy); g.lineTo(w, yy); g.stroke();
-      g.fillStyle = isTarget ? '#4ade80' : '#6f7c86';
+      g.fillStyle = isTarget ? '#7bd3a6' : '#8a8173';
       g.fillText(names[((m % 12) + 12) % 12], 6, yy);
     }
 
@@ -769,14 +809,14 @@
     for (let i = 1; i < trail.length; i++) {
       const a = trail[i - 1], b = trail[i];
       if (a.v == null || b.v == null || b.t - a.t > 300) continue;
-      g.strokeStyle = good(b.v) ? '#4ade80' : '#ffb547';
+      g.strokeStyle = good(b.v) ? '#7bd3a6' : '#d8ac63';
       g.beginPath(); g.moveTo(x(a.t), clamp(y(a.v), 3, h - 3)); g.lineTo(x(b.t), clamp(y(b.v), 3, h - 3)); g.stroke();
     }
     const tip = trail[trail.length - 1];
     if (tip && tip.v != null && now - tip.t < 300) {
       const ok = good(tip.v);
       const ty = clamp(y(tip.v), 6, h - 6);
-      g.fillStyle = ok ? '#4ade80' : '#ffb547';
+      g.fillStyle = ok ? '#7bd3a6' : '#d8ac63';
       g.beginPath(); g.arc(x(tip.t), ty, 6, 0, Math.PI * 2); g.fill();
       if (!free && !ok) {                 // arrow pointing towards the target
         const up = tip.v < cur, ax = x(tip.t), s = up ? -1 : 1, ay = ty + s * 12;
@@ -849,7 +889,7 @@
     const d = +b.dataset.d;
     if (b.dataset.r === 'lo') S.lo = clamp(S.lo + d, MIN_MIDI, S.hi - 1);
     else S.hi = clamp(S.hi + d, S.lo + 1, MAX_MIDI);
-    save(); renderRange(); renderKeyboard(); scrollKeyboardToRange(true); updateMediaMeta();
+    save(); renderRange(); renderKeyboard(); scrollKeyboardToRange(true); updateMediaMeta(); renderNote();
   }));
   el.chromatic.addEventListener('change', () => { S.chromatic = el.chromatic.checked; save(); renderRange(); renderKeyboard(); });
 
@@ -877,7 +917,8 @@
   renderPatterns();
   renderCounter();
   bindMediaSession();
-  setTab(S.tab in TITLES ? S.tab : 'notes');
+  const wantsTab = new URLSearchParams(location.search).get('tab');
+  setTab(wantsTab in TITLES ? wantsTab : (S.tab in TITLES ? S.tab : 'notes'));
 
   window.__vt = { detectPitch, handlePitch, trail, pcm, loopOf, get SR() { return SR; }, audio };
 
