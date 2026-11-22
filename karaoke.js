@@ -34,6 +34,9 @@
     settingsBtn: $('karaokeSettingsBtn'),
     settings: $('karaokeSettings'),
     results: $('karaokeResults'),
+    resultsBody: $('karaokeResultsBody'),
+    resultsClose: $('karaokeResultsClose'),
+    again: $('karaokeAgain'),
   };
 
   const state = {
@@ -54,6 +57,7 @@
     lastT: 0,
     viewTime: 0,
     pendingSeek: null,
+    session: { best: new Map(), current: null, active: false },
   };
 
   let manifest = null;
@@ -84,6 +88,35 @@
     if (a < 0.75) return `${Math.round(Math.abs(cents))} центов`;
     const half = Math.round(a * 2) / 2;
     return `${String(half).replace('.', ',')} полутона`;
+  }
+
+  function resetSession() {
+    state.session.best = new Map();
+    state.session.current = null;
+    state.session.active = false;
+  }
+
+  function startAttempt() {
+    if (!state.track) return;
+    if (state.session.active) endAttempt();
+    state.session.current = C.newAttempt();
+    state.session.active = true;
+  }
+
+  function endAttempt() {
+    if (!state.session.active || !state.session.current) {
+      state.session.active = false;
+      state.session.current = null;
+      return;
+    }
+    C.finalizeAttempt(state.session.best, state.session.current);
+    state.session.active = false;
+    state.session.current = null;
+  }
+
+  function addScoreFrame(t, midi) {
+    if (!state.session.active || !state.session.current) return;
+    C.addFrame(state.session.current, state.track, t, midi);
   }
 
   function initials(t) {
@@ -196,6 +229,10 @@
       state.loop = null;
       state.trail.length = 0;
       state.lastT = 0;
+      resetSession();
+      setSpeed(1);
+      ui.loop.classList.remove('on');
+      ui.loop.textContent = 'Фраза';
 
       ui.title.textContent = track.title || t.title;
       ui.artist.textContent = track.artist || t.artist || '';
@@ -263,6 +300,7 @@
     }
     state.playing = true;
     ui.play.classList.add('on');
+    if (!state.session.active) startAttempt();
     if (state.guideOn && ui.guide.src) {
       ui.guide.currentTime = ui.song.currentTime;
       ui.guide.play().catch(() => {});
@@ -291,8 +329,15 @@
     state.pendingSeek = null;
   }
 
-  function seek(t) {
+  function seek(t, keepLoop = false) {
     if (!state.track) return;
+    if (!keepLoop) {
+      state.loop = null;
+      ui.loop.classList.remove('on');
+      ui.loop.textContent = 'Фраза';
+    }
+    endAttempt();
+    if (state.playing) startAttempt();
     const v = Math.max(0, Math.min(state.track.duration, t));
     state.viewTime = v;
     state.pendingSeek = v;
@@ -382,10 +427,14 @@
     updateLyrics(t);
     drawLane();
     if (state.loop && t >= state.loop.t1 - 0.04) {
+      endAttempt();
       ui.song.currentTime = state.loop.t0;
       if (ui.guide.src) ui.guide.currentTime = state.loop.t0;
+      state.viewTime = state.loop.t0;
       state.lastLine = -2;
       state.lastWord = -2;
+      state.trail.length = 0;
+      startAttempt();
     }
     state.raf = requestAnimationFrame(tick);
   }
@@ -398,9 +447,11 @@
       return;
     }
     if (f.midi == null) {
+      addScoreFrame(t, null);
       updateTuner(t, null);
       return;
     }
+    addScoreFrame(t, f.midi);
     pushPitch(f.midi, t, true);
   }
 
@@ -414,6 +465,94 @@
     const ok = await window.__vt.startMic('songs', onMicFrame);
     ui.micBtn.disabled = false;
     if (!ok) setTuner(null, 'Нет доступа к микрофону', 'Разреши микрофон в настройках браузера');
+  }
+
+  function setSpeed(rate) {
+    state.speed = rate;
+    if (ui.song) {
+      ui.song.playbackRate = rate;
+      ui.song.preservesPitch = true;
+    }
+    if (ui.guide) {
+      ui.guide.playbackRate = rate;
+      ui.guide.preservesPitch = true;
+    }
+    if (ui.speed) {
+      ui.speed.textContent = rate === 1 ? '1×' : `${rate}×`;
+      ui.speed.classList.toggle('on', rate !== 1);
+    }
+  }
+
+  function toggleSpeed() {
+    setSpeed(state.speed === 1 ? 0.75 : 1);
+  }
+
+  function loopPhrase(i) {
+    if (!state.track || !state.track.lines[i]) return;
+    const line = state.track.lines[i];
+    state.loop = { t0: line.t0, t1: line.t1, line: i };
+    ui.loop.classList.add('on');
+    ui.loop.textContent = 'Фраза вкл';
+    seek(line.t0, true);
+  }
+
+  function toggleLoop() {
+    if (!state.track) return;
+    if (state.loop) {
+      state.loop = null;
+      ui.loop.classList.remove('on');
+      ui.loop.textContent = 'Фраза';
+      return;
+    }
+    let idx = C.lineAt(state.track, state.viewTime);
+    if (idx < 0) idx = state.track.lines.findIndex(l => l.t0 > state.viewTime);
+    if (idx < 0) idx = state.track.lines.length - 1;
+    loopPhrase(idx);
+  }
+
+  function showResults() {
+    if (!state.track) return;
+    pause();
+    endAttempt();
+    const ov = C.overall(state.session.best, state.track);
+    ui.results.hidden = false;
+    ui.resultsBody.innerHTML = '';
+    const total = document.createElement('div');
+    total.className = 'karaoke-result-total';
+    total.innerHTML = `<b>${Math.round(ov.score * 100)}%</b> попаданий · ${ov.played} из ${ov.total} строк`;
+    ui.resultsBody.appendChild(total);
+    if (!ov.played) {
+      const note = document.createElement('p');
+      note.className = 'card-note';
+      note.textContent = 'Пока нет данных: спой хотя бы одну строку.';
+      ui.resultsBody.appendChild(note);
+    }
+    state.track.lines.forEach((line, i) => {
+      const s = state.session.best.get(i);
+      const row = document.createElement('div');
+      row.className = 'karaoke-line-result';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = line.text;
+      btn.title = 'Зациклить строку';
+      const pct = document.createElement('span');
+      pct.className = 'pct';
+      pct.textContent = s ? `${Math.round(s.score * 100)}%` : '—';
+      const cents = document.createElement('span');
+      cents.className = 'pct';
+      cents.textContent = s && s.avgAbs != null ? `±${Math.round(s.avgAbs)}¢` : '';
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const fill = document.createElement('i');
+      fill.style.width = s ? `${Math.min(100, s.score * 100)}%` : '0%';
+      bar.appendChild(fill);
+      row.append(btn, pct, cents, bar);
+      btn.addEventListener('click', () => {
+        ui.results.hidden = true;
+        loopPhrase(i);
+      });
+      ui.resultsBody.appendChild(row);
+    });
   }
 
   function setTuner(cents, status, detail, cls) {
@@ -634,6 +773,7 @@
     else if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.code === 'ArrowLeft') { e.preventDefault(); seek(ui.song.currentTime - 5); }
     else if (e.code === 'ArrowRight') { e.preventDefault(); seek(ui.song.currentTime + 5); }
+    else if (e.code === 'KeyR') { e.preventDefault(); toggleLoop(); }
   };
 
   K.onMicStarted = () => {
@@ -667,6 +807,7 @@
   K.getState = () => ({ state, manifest });
   K.debug = {
     seek, play, pause, open: openTrack, state, drawLane, frame: onMicFrame,
+    showResults, loopPhrase, setSpeed,
     pushPitch: (midi, t) => {
       if (t != null) state.viewTime = t;
       pushPitch(midi, state.viewTime, state.playing);
@@ -687,9 +828,19 @@
     if (e.code === 'ArrowRight') { e.preventDefault(); seek(ui.song.currentTime + 5); }
   });
   ui.settingsBtn?.addEventListener('click', () => { ui.settings.hidden = !ui.settings.hidden; });
+  ui.resultBtn?.addEventListener('click', showResults);
+  ui.loop?.addEventListener('click', toggleLoop);
+  ui.speed?.addEventListener('click', toggleSpeed);
+  ui.resultsClose?.addEventListener('click', () => { ui.results.hidden = true; });
+  ui.again?.addEventListener('click', () => {
+    ui.results.hidden = true;
+    resetSession();
+    seek(0);
+    play();
+  });
   ui.song?.addEventListener('ended', () => {
-    pause();
-    setStatus('Песня закончилась');
+    endAttempt();
+    showResults();
   });
 
   if (document.body.dataset.tab === 'songs') K.enter();
