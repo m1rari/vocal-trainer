@@ -719,6 +719,7 @@ body:not([data-mic="free"]) .only-free { display: none; }
 
 /* ---------- Songs / karaoke ---------- */
 
+body[data-karaoke="player"] .page-head { display: none; }
 .songs-library { max-width: 860px; margin: 0 auto; }
 .songs-toolbar { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
 .songs-count { color: var(--text-2); font-weight: 600; }

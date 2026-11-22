@@ -48,6 +48,7 @@
   const state = {
     trackId: null,
     track: null,
+    view: 'library',
     playing: false,
     raf: 0,
     lastLine: -2,
@@ -284,6 +285,7 @@
 
       state.trackId = id;
       state.track = track;
+      state.view = 'player';
       state.lastLine = -2;
       state.lastWord = -2;
       state.lastPrev = null;
@@ -338,6 +340,7 @@
       ui.settings.hidden = true;
       ui.karaoke.hidden = false;
       ui.library.hidden = true;
+      document.body.dataset.karaoke = 'player';
       updateLyrics(0);
       drawLane();
       history.replaceState(null, '', `?tab=songs&track=${encodeURIComponent(id)}`);
@@ -350,6 +353,8 @@
   function showLibrary() {
     pause();
     if (state.micOn && window.__vt) window.__vt.stopMic();
+    state.view = 'library';
+    delete document.body.dataset.karaoke;
     ui.karaoke.hidden = true;
     ui.library.hidden = false;
     history.replaceState(null, '', '?tab=songs');
@@ -830,13 +835,20 @@
     const wanted = params.get('track');
     if (wanted && manifest.tracks.some(t => t.id === wanted)) {
       if (state.trackId !== wanted) await openTrack(wanted);
-      else { ui.karaoke.hidden = false; ui.library.hidden = true; }
-    } else if (state.trackId && state.track) {
+      else {
+        state.view = 'player';
+        ui.karaoke.hidden = false;
+        ui.library.hidden = true;
+        document.body.dataset.karaoke = 'player';
+      }
+    } else if (state.view === 'player' && state.trackId && state.track) {
       ui.karaoke.hidden = false;
       ui.library.hidden = true;
+      document.body.dataset.karaoke = 'player';
     } else {
       ui.library.hidden = false;
       ui.karaoke.hidden = true;
+      delete document.body.dataset.karaoke;
     }
     if (manifest.error) {
       ui.empty.hidden = false;
@@ -847,6 +859,7 @@
 
   K.leave = function () {
     pause();
+    delete document.body.dataset.karaoke;
     if (window.__vt && state.micOn) window.__vt.stopMic?.();
   };
 
