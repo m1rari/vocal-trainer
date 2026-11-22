@@ -37,6 +37,12 @@
     resultsBody: $('karaokeResultsBody'),
     resultsClose: $('karaokeResultsClose'),
     again: $('karaokeAgain'),
+    hint: $('karaokeHint'),
+    hintClose: $('karaokeHintClose'),
+    vocalVol: $('karaokeVocalVol'),
+    guideVol: $('karaokeGuideVol'),
+    sync: $('karaokeSync'),
+    syncVal: $('karaokeSyncVal'),
   };
 
   const state = {
@@ -53,6 +59,10 @@
     guideOn: false,
     micOn: false,
     syncMs: 0,
+    vocalVol: 1,
+    guideVol: 0.35,
+    hintSeen: false,
+    lastGuideSync: 0,
     trail: [],
     lastT: 0,
     viewTime: 0,
@@ -117,6 +127,58 @@
   function addScoreFrame(t, midi) {
     if (!state.session.active || !state.session.current) return;
     C.addFrame(state.session.current, state.track, t, midi);
+  }
+
+  const LS_KEY = 'vt-songs';
+
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      if (typeof s.vocalVol === 'number') state.vocalVol = clamp(s.vocalVol, 0, 1);
+      if (typeof s.guideVol === 'number') state.guideVol = clamp(s.guideVol, 0, 1);
+      if (typeof s.speed === 'number') state.speed = s.speed === 0.75 ? 0.75 : 1;
+      if (typeof s.syncMs === 'number') state.syncMs = clamp(s.syncMs, -300, 300);
+      if (typeof s.hintSeen === 'boolean') state.hintSeen = s.hintSeen;
+    } catch (e) {}
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        lastId: state.trackId,
+        vocalVol: state.vocalVol,
+        guideVol: state.guideVol,
+        speed: state.speed,
+        syncMs: state.syncMs,
+        hintSeen: state.hintSeen,
+      }));
+    } catch (e) {}
+  }
+
+  function applyVolumes() {
+    if (ui.song) ui.song.volume = state.vocalVol;
+    if (ui.guide) ui.guide.volume = state.guideOn ? state.guideVol : 0;
+  }
+
+  function syncGuide(t) {
+    if (!state.guideOn || !ui.guide.src || ui.guide.paused) return;
+    const now = performance.now();
+    if (now - state.lastGuideSync < 500) return;
+    state.lastGuideSync = now;
+    if (Math.abs(ui.guide.currentTime - t) > 0.06) ui.guide.currentTime = t;
+  }
+
+  function setGuide(on) {
+    state.guideOn = !!on && !!ui.guide.src;
+    ui.guideBtn.classList.toggle('on', state.guideOn);
+    ui.guideBtn.textContent = state.guideOn ? 'Поводырь вкл' : 'Поводырь';
+    applyVolumes();
+    if (state.guideOn && state.playing) {
+      ui.guide.currentTime = ui.song.currentTime;
+      ui.guide.play().catch(() => {});
+    } else {
+      ui.guide.pause();
+    }
   }
 
   function initials(t) {
@@ -230,9 +292,17 @@
       state.trail.length = 0;
       state.lastT = 0;
       resetSession();
-      setSpeed(1);
+      setSpeed(state.speed);
       ui.loop.classList.remove('on');
       ui.loop.textContent = 'Фраза';
+      ui.vocalVol.value = state.vocalVol;
+      ui.guideVol.value = state.guideVol;
+      ui.sync.value = state.syncMs;
+      ui.syncVal.textContent = `${state.syncMs} мс`;
+      ui.hint.hidden = state.hintSeen;
+      setGuide(false);
+      applyVolumes();
+      saveSettings();
 
       ui.title.textContent = track.title || t.title;
       ui.artist.textContent = track.artist || t.artist || '';
@@ -301,8 +371,10 @@
     state.playing = true;
     ui.play.classList.add('on');
     if (!state.session.active) startAttempt();
+    applyVolumes();
     if (state.guideOn && ui.guide.src) {
       ui.guide.currentTime = ui.song.currentTime;
+      state.lastGuideSync = performance.now();
       ui.guide.play().catch(() => {});
     }
     startTick();
@@ -425,6 +497,7 @@
     state.viewTime = t;
     updateProgress(t);
     updateLyrics(t);
+    syncGuide(t);
     drawLane();
     if (state.loop && t >= state.loop.t1 - 0.04) {
       endAttempt();
@@ -485,6 +558,7 @@
 
   function toggleSpeed() {
     setSpeed(state.speed === 1 ? 0.75 : 1);
+    saveSettings();
   }
 
   function loopPhrase(i) {
@@ -842,6 +916,35 @@
     endAttempt();
     showResults();
   });
+
+  ui.guideBtn?.addEventListener('click', () => { setGuide(!state.guideOn); saveSettings(); });
+  ui.vocalVol?.addEventListener('input', () => {
+    state.vocalVol = Number(ui.vocalVol.value);
+    applyVolumes();
+    saveSettings();
+  });
+  ui.guideVol?.addEventListener('input', () => {
+    state.guideVol = Number(ui.guideVol.value);
+    applyVolumes();
+    saveSettings();
+  });
+  ui.sync?.addEventListener('input', () => {
+    state.syncMs = Number(ui.sync.value);
+    ui.syncVal.textContent = `${state.syncMs} мс`;
+    saveSettings();
+  });
+  ui.hintClose?.addEventListener('click', () => {
+    state.hintSeen = true;
+    ui.hint.hidden = true;
+    saveSettings();
+  });
+
+  loadSettings();
+  if (ui.vocalVol) ui.vocalVol.value = state.vocalVol;
+  if (ui.guideVol) ui.guideVol.value = state.guideVol;
+  if (ui.sync) ui.sync.value = state.syncMs;
+  if (ui.syncVal) ui.syncVal.textContent = `${state.syncMs} мс`;
+  applyVolumes();
 
   if (document.body.dataset.tab === 'songs') K.enter();
 })();
