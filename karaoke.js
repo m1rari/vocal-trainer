@@ -430,6 +430,9 @@
     const d = state.track ? state.track.duration : 0;
     ui.progressFill.style.width = d ? `${Math.min(100, t / d * 100)}%` : '0%';
     ui.time.textContent = `${fmt(t)} / ${fmt(d)}`;
+    ui.progress.setAttribute('aria-valuemin', '0');
+    ui.progress.setAttribute('aria-valuemax', String(Math.round(d)));
+    ui.progress.setAttribute('aria-valuenow', String(Math.round(t)));
   }
 
   function updateLyrics(t) {
@@ -805,9 +808,15 @@
     g.stroke();
   }
 
+  let statusText = '';
+  let statusAt = 0;
   function setStatus(text, cls) {
     const el = $('karaokeStatus');
     if (!el) return;
+    const now = performance.now();
+    if (now - statusAt < 450) return;
+    statusAt = now;
+    statusText = text;
     el.textContent = text;
     el.className = 'karaoke-status' + (cls ? ' ' + cls : '');
   }
