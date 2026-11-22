@@ -37,6 +37,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18l5-6 4 3 4-8 5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Распевки</span>
         </button>
+        <button data-tab="songs">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg>
+          <span>Песни</span>
+        </button>
         <button data-tab="mic">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           <span>Микрофон</span>
@@ -242,6 +246,85 @@
       </div>
     </main>
 
+    <!-- ===== Songs / karaoke view ===== -->
+    <main class="view" id="viewSongs" hidden>
+      <section class="songs-library" id="songsLibrary">
+        <div class="songs-toolbar">
+          <span class="songs-count" id="songsCount"></span>
+          <span class="songs-hint">Новую песню пришли в чат — я разберу вокал и добавлю сюда.</span>
+        </div>
+        <div class="song-list" id="songList"></div>
+        <div class="songs-empty" id="songsEmpty" hidden>
+          <div class="songs-empty-mark" aria-hidden="true">♪</div>
+          <p>Пока нет песен.</p>
+          <p class="card-note">Пришли MP3 в чат — я разберу вокал и добавлю песню в список.</p>
+        </div>
+      </section>
+
+      <section class="karaoke" id="karaoke" hidden>
+        <div class="karaoke-top">
+          <button class="btn btn-ghost" id="karaokeBack">← Песни</button>
+          <div class="karaoke-heading">
+            <b id="karaokeTitle">—</b>
+            <span id="karaokeArtist"></span>
+          </div>
+          <button class="btn btn-ghost" id="karaokeSettingsBtn">Настройки</button>
+        </div>
+
+        <div class="karaoke-stage">
+          <div class="lyrics" id="karaokeLyrics">
+            <div class="lyric-prev" id="lyricPrev"></div>
+            <div class="lyric-current" id="lyricCurrent">Вступление</div>
+            <div class="lyric-next" id="lyricNext"></div>
+          </div>
+          <canvas class="karaoke-lane" id="karaokeLane" aria-label="Мелодия и твой голос"></canvas>
+          <div class="karaoke-tuner" aria-label="Тюнер">
+            <div class="karaoke-status" id="karaokeStatus" aria-live="polite">Включи микрофон</div>
+            <div class="karaoke-gauge" aria-hidden="true">
+              <div class="karaoke-zone"></div>
+              <div class="karaoke-needle" id="karaokeNeedle"></div>
+            </div>
+            <div class="karaoke-scale" aria-hidden="true"><span>−100</span><span>0</span><span>+100</span></div>
+            <div class="karaoke-detail" id="karaokeDetail">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="karaoke-transport">
+          <button class="tbtn tbtn-main" id="karaokePlay" aria-label="Пуск">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
+          </button>
+          <span class="karaoke-time" id="karaokeTime">0:00 / 0:00</span>
+          <div class="karaoke-progress" id="karaokeProgress" role="slider" aria-label="Перемотка" tabindex="0">
+            <div class="karaoke-progress-fill" id="karaokeProgressFill"></div>
+          </div>
+          <button class="btn btn-sm" id="karaokeLoop">Фраза</button>
+          <button class="btn btn-sm" id="karaokeSpeed">1×</button>
+          <button class="btn btn-sm" id="karaokeGuide">Поводырь</button>
+          <button class="btn btn-sm" id="karaokeMic">Микрофон</button>
+          <button class="btn btn-sm" id="karaokeResult">Итог</button>
+        </div>
+
+        <div class="karaoke-settings" id="karaokeSettings" hidden>
+          <label class="karaoke-opt"><span>Вокал</span><input type="range" id="karaokeVocalVol" min="0" max="1" step="0.01" value="1"></label>
+          <label class="karaoke-opt"><span>Поводырь</span><input type="range" id="karaokeGuideVol" min="0" max="1" step="0.01" value="0.35"></label>
+          <label class="karaoke-opt"><span>Синхронизация</span><input type="range" id="karaokeSync" min="-300" max="300" step="10" value="0"><b id="karaokeSyncVal">0 мс</b></label>
+          <p class="card-note">Для честного счёта лучше наушники: с колонками микрофон может слышать оригинал.</p>
+        </div>
+
+        <div class="karaoke-results" id="karaokeResults" hidden>
+          <div class="karaoke-results-head">
+            <b>Итог</b>
+            <button class="btn btn-ghost" id="karaokeResultsClose" aria-label="Закрыть">×</button>
+          </div>
+          <div id="karaokeResultsBody"></div>
+          <button class="btn btn-accent" id="karaokeAgain">Ещё раз</button>
+        </div>
+
+        <audio id="songAudio" preload="auto"></audio>
+        <audio id="guideAudio" preload="auto"></audio>
+      </section>
+    </main>
+
     <!-- ===== Settings view ===== -->
     <main class="view" id="viewSettings" hidden>
       <div class="settings-grid">
@@ -314,6 +397,8 @@
       </div>
     </div>
   </div>
+  <script src="karaoke-core.js"></script>
   <script src="app.js"></script>
+  <script src="karaoke.js"></script>
 </body>
 </html>

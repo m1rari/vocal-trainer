@@ -17,10 +17,11 @@
     { id: 'oct', name: 'Октава', deg: '1‑5‑8‑5‑1', off: [0, 7, 12, 7, 0] },
     { id: 'semi', name: 'Полутон', deg: 'нота – выше – нота', off: [0, 1, 0] },
   ];
-  const TITLES = { notes: 'Ноты', chant: 'Распевки', mic: 'Микрофон', settings: 'Настройки' };
+  const TITLES = { notes: 'Ноты', chant: 'Распевки', songs: 'Песни', mic: 'Микрофон', settings: 'Настройки' };
   const LEDES = {
     notes: 'Слушай ноту и повторяй голосом — в своём диапазоне, без спешки.',
     chant: 'Короткие распевки по ступеням: инструмент играет, ты отвечаешь.',
+    songs: 'Выбери разобранную песню, пой вместе с вокалом и следи за нотами.',
     mic: 'Микрофон слушает тебя и показывает, насколько точно ты попадаешь в ноту.',
     settings: 'Авторежим, названия нот и поведение в машине.',
   };
@@ -62,7 +63,7 @@
     counter: $('counter'), prev: $('prevBtn'), next: $('nextBtn'), auto: $('autoBtn'), hint: $('hint'),
     lo: $('loVal'), hi: $('hiVal'), count: $('rangeCount'), kb: $('kb'), kbWrap: $('kbWrap'),
     chromatic: $('chromatic'), loader: $('loader'), loaderText: $('loaderText'), patterns: $('patternList'),
-    tabbar: $('tabbar'), vTrain: $('viewTrain'), vMic: $('viewMic'), vSettings: $('viewSettings'),
+    tabbar: $('tabbar'), vTrain: $('viewTrain'), vMic: $('viewMic'), vSongs: $('viewSongs'), vSettings: $('viewSettings'),
     micNote: $('micNote'), micNoteSub: $('micNoteSub'), micStatus: $('micStatus'), micDetail: $('micDetail'),
     needle: $('needle'), holdBar: $('holdBar'), micToggle: $('micToggle'), micPlay: $('micPlay'),
     micAdvance: $('micAdvance'), micHits: $('micHits'), graph: $('micGraph'), level: $('micLevel'), micLive: $('micLive'),
@@ -516,17 +517,20 @@
   }
 
   function setTab(tab) {
-    const wasTrain = S.tab === 'notes' || S.tab === 'chant';
+    const prevTab = S.tab;
+    const wasTrain = prevTab === 'notes' || prevTab === 'chant';
     const isTrain = tab === 'notes' || tab === 'chant';
-    if (tab !== S.tab && (auto || !audio.paused) && !(wasTrain && tab === 'settings')) {
+    if (tab !== prevTab && (auto || !audio.paused) && !(wasTrain && tab === 'settings')) {
       if (auto) stopAuto(); else { audio.pause(); activeSpec = null; }
     }
-    if (S.tab === 'mic' && tab !== 'mic') stopMic();
+    if (prevTab === 'mic' && tab !== 'mic') stopMic();
+    if (prevTab === 'songs' && tab !== 'songs') window.Karaoke?.leave();
     if (tab !== 'settings') { S.tab = tab; save(); }
     el.title.textContent = TITLES[tab];
     el.lede.textContent = LEDES[tab];
     el.vTrain.hidden = !isTrain;
     el.vMic.hidden = tab !== 'mic';
+    el.vSongs.hidden = tab !== 'songs';
     el.vSettings.hidden = tab !== 'settings';
     document.body.dataset.mode = isTrain ? tab : '';
     document.body.dataset.tab = tab;
@@ -544,6 +548,7 @@
       requestAnimationFrame(() => scrollKeyboardToRange(false));
     }
     if (tab === 'mic') { if (cur == null) noteNext(); applyMicMode(); }
+    if (tab === 'songs') window.Karaoke?.enter();
     window.scrollTo(0, 0);
   }
 
@@ -905,6 +910,7 @@
   el.micLive.addEventListener('change', () => { S.micLive = el.micLive.checked; save(); });
 
   document.addEventListener('keydown', e => {
+    if (S.tab === 'songs') { window.Karaoke?.onKey(e); return; }
     if (S.tab !== 'notes' && S.tab !== 'chant') return;
     if (e.code === 'Space') { e.preventDefault(); el.auto.click(); }
     else if (e.code === 'ArrowRight') el.next.click();
