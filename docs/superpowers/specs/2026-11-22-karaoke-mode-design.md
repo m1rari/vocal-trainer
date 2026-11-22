@@ -380,7 +380,7 @@ Python-пакеты: `faster-whisper`, `librosa`, `numpy`, `soundfile`, `matplot
 
 ## 13. Service worker и офлайн
 
-- Поднять `VERSION` до `vt-v5`.
+- Поднять `VERSION` до `vt-v6`.
 - В `ASSETS` добавить `tracks/index.json`, `karaoke.js`, `karaoke-core.js`.
 - Для `/tracks/` — стратегия cache-first с рантайм-докладыванием: первый раз качается, дальше офлайн.
 - Манифест треков запрашивать с `cache: 'no-cache'`, чтобы новые песни появлялись без сброса кэша.
