@@ -46,6 +46,15 @@ assert.strictEqual(C.noteAt(track, 0.51), null);
 assert.ok(C.noteAt(track, 0.6));
 assert.ok(C.noteAt(track, 1.4));
 assert.strictEqual(C.noteAt(track, 1.43), null);
+assert.strictEqual(C.noteAt({ ...track, notes: [{ ...track.notes[0], conf: 0.19 }] }, 0.6), null);
+assert.ok(C.noteAt({ ...track, notes: [{ ...track.notes[0], conf: 0.2 }] }, 0.6));
+
+const shortTrack = {
+  ...track,
+  notes: [{ t0: 0.5, t1: 0.65, midi: 57, conf: 0.9 }],
+};
+assert.ok(C.noteAt(shortTrack, 0.51));
+assert.ok(C.noteAt(shortTrack, 0.64));
 
 assert.strictEqual(C.lineAt(track, 0.5), 0);
 assert.strictEqual(C.lineAt(track, 1.5), 0);
@@ -98,6 +107,16 @@ C.finalizeAttempt(best, (() => {
 })());
 assert.strictEqual(best.get(0).score, strong);
 
+// single-frame attempts are fragments and do not enter the overall score
+const frag = C.newAttempt();
+C.addFrame(frag, track, 0.6, 57);
+const fragBest = new Map();
+C.finalizeAttempt(fragBest, frag);
+assert.ok(fragBest.get(0).fragment);
+assert.strictEqual(C.overall(fragBest, track).played, 0);
+assert.ok(C.lineHasNotes(track, 0));
+assert.strictEqual(C.scorableLineCount(track), 1);
+
 // ---------- overall excludes unplayed lines ----------
 const track2 = {
   id: 'y', title: 'Y', duration: 5, fps: 10,
@@ -126,5 +145,8 @@ assert.deepStrictEqual(C.validateTrack(track), { ok: true, errors: [] });
 const bad = C.validateTrack({ ...track, pitch: pitch.slice(0, 10) });
 assert.strictEqual(bad.ok, false);
 assert.ok(bad.errors.some(e => e.includes('pitch length')));
+assert.strictEqual(C.validateTrack({ ...track, lines: [] }).ok, false);
+assert.strictEqual(C.validateTrack({ ...track, lines: [{ ...track.lines[0], words: [] }] }).ok, false);
+assert.strictEqual(C.validateTrack({ ...track, notes: [] }).ok, false);
 
 console.log('ok: karaoke core');

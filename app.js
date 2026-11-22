@@ -633,6 +633,7 @@
         resetHold();
         micUi(null, isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
       } else {
+        recent.length = 0;
         window.Karaoke?.onMicStarted?.();
       }
       micLast = performance.now();
@@ -662,6 +663,7 @@
       el.level.style.width = '0%';
       micUi(null, 'Включи микрофон и спой ноту', ' ');
     } else {
+      recent.length = 0;
       window.Karaoke?.onMicStopped?.();
     }
   }
@@ -710,7 +712,15 @@
     for (let i = 0; i < buf.length; i += 4) { const a = Math.abs(buf[i]); if (a > peak) peak = a; }
     if (mic.consumer === 'songs') {
       const f = detectPitch(buf, mic.ctx.sampleRate);
-      const midi = f > 0 ? 69 + 12 * Math.log2(f / 440) : null;
+      let midi = null;
+      if (f > 0) {
+        recent.push(69 + 12 * Math.log2(f / 440));
+        if (recent.length > 5) recent.shift();
+        const sorted = [...recent].sort((a, b) => a - b);
+        midi = sorted[recent.length >> 1];
+      } else {
+        recent.length = 0;
+      }
       mic.onFrame?.({ freq: f, midi, rms: peak, dt, now });
       return;
     }

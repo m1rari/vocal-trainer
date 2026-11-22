@@ -8,6 +8,8 @@
   'use strict';
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const NOTE_CONF_MIN = 0.2;
+  const MIN_ATTEMPT_FRAMES = 6;
 
   const hzToMidi = hz => 69 + 12 * Math.log2(hz / 440);
   const midiToHz = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -43,8 +45,9 @@
       else { found = n; break; }
     }
     if (!found) return null;
-    if ((found.conf == null ? 1 : found.conf) < 0.6) return null;
-    const guard = Math.min(0.08, Math.max(0.02, 0.2 * (found.t1 - found.t0)));
+    if ((found.conf == null ? 1 : found.conf) < NOTE_CONF_MIN) return null;
+    const dur = found.t1 - found.t0;
+    const guard = dur < 0.2 ? 0 : Math.min(0.08, 0.2 * dur);
     if (t < found.t0 + guard || t > found.t1 - guard) return null;
     return found;
   }
@@ -114,18 +117,41 @@
       if (!s.frames) continue;
       const score = s.inTune / s.frames;
       const prev = best.get(i);
-      if (!prev || score > prev.score) {
-        best.set(i, {
-          frames: s.frames,
-          inTune: s.inTune,
-          voiced: s.voiced,
-          sumAbs: s.sumAbs,
-          score,
-          voicedRatio: s.voiced / s.frames,
-          avgAbs: s.voiced ? s.sumAbs / s.voiced : null,
-        });
+      const fragment = s.frames < MIN_ATTEMPT_FRAMES;
+      const record = {
+        frames: s.frames,
+        inTune: s.inTune,
+        voiced: s.voiced,
+        sumAbs: s.sumAbs,
+        score,
+        voicedRatio: s.voiced / s.frames,
+        avgAbs: s.voiced ? s.sumAbs / s.voiced : null,
+        fragment,
+      };
+      if (!prev) {
+        best.set(i, record);
+      } else if (!fragment && (prev.fragment || score > prev.score)) {
+        best.set(i, record);
+      } else if (fragment && prev.fragment && s.frames > prev.frames) {
+        best.set(i, record);
       }
     }
+  }
+
+  function lineHasNotes(track, i) {
+    const line = track && track.lines && track.lines[i];
+    if (!line || !Array.isArray(track.notes)) return false;
+    return track.notes.some(n =>
+      (n.conf == null ? 1 : n.conf) >= NOTE_CONF_MIN &&
+      n.t1 > line.t0 && n.t0 < line.t1
+    );
+  }
+
+  function scorableLineCount(track) {
+    if (!track || !Array.isArray(track.lines)) return 0;
+    let n = 0;
+    for (let i = 0; i < track.lines.length; i++) if (lineHasNotes(track, i)) n++;
+    return n;
   }
 
   function overall(best, track) {
@@ -133,12 +159,12 @@
     let inTune = 0;
     let played = 0;
     for (const s of best.values()) {
-      if (!s.frames) continue;
+      if (!s.frames || s.fragment) continue;
       played++;
       frames += s.frames;
       inTune += s.inTune;
     }
-    const total = track && track.lines ? track.lines.length : 0;
+    const total = scorableLineCount(track);
     return {
       score: frames ? inTune / frames : 0,
       frames,
@@ -165,6 +191,7 @@
       if (track.rms.length !== need) errors.push(`rms length ${track.rms.length} != ${need}`);
     }
     if (Array.isArray(track.notes)) {
+      if (!track.notes.length) errors.push('notes is empty');
       for (let i = 0; i < track.notes.length; i++) {
         const n = track.notes[i];
         if (!n || !(n.t1 > n.t0)) errors.push(`note ${i} has bad times`);
@@ -172,10 +199,12 @@
       }
     }
     if (Array.isArray(track.lines)) {
+      if (!track.lines.length) errors.push('lines is empty');
       for (let i = 0; i < track.lines.length; i++) {
         const l = track.lines[i];
         if (!l || !(l.t1 >= l.t0)) errors.push(`line ${i} has bad times`);
         if (!Array.isArray(l.words)) errors.push(`line ${i} has no words`);
+        else if (!l.words.length) errors.push(`line ${i} has no words`);
         if (i && track.lines[i - 1].t0 > l.t0) { errors.push('lines are not sorted'); break; }
       }
     }
@@ -183,9 +212,10 @@
   }
 
   return {
+    NOTE_CONF_MIN, MIN_ATTEMPT_FRAMES,
     hzToMidi, midiToHz, foldOctave, centsBetween,
     pitchAt, noteAt, lineAt, wordAt,
     newAttempt, addFrame, finalizeAttempt, overall,
-    validateTrack,
+    lineHasNotes, scorableLineCount, validateTrack,
   };
 });

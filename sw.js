@@ -1,5 +1,5 @@
 // Offline cache: app shell, viola samples, karaoke tracks on demand.
-const VERSION = 'vt-v6';
+const VERSION = 'vt-v7';
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const SAMPLES = [];
 for (let o = 3; o <= 5; o++) for (const n of NAMES) SAMPLES.push(`sounds/viola/${n}${o}.mp3`);
@@ -66,6 +66,20 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
 
   if (url.pathname.endsWith('/tracks/index.json')) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-cache' })
+        .then(res => {
+          if (!res || !res.ok) throw new Error('offline');
+          const copy = res.clone();
+          caches.open(VERSION).then(c => c.put(e.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(e.request, { ignoreVary: true }))
+    );
+    return;
+  }
+
+  if (url.pathname.includes('/tracks/') && url.pathname.endsWith('.json')) {
     e.respondWith(
       fetch(e.request, { cache: 'no-cache' })
         .then(res => {

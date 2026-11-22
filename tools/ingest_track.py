@@ -31,47 +31,17 @@ SR_GUIDE = 44100
 HOP = 512
 FRAME = 2048
 
-# Common ASR slips in this song. Applied after line splitting, before JSON.
-CORRECTIONS = [
-    (r"\bпод теченью\b", "по течению"),
-    (r"\bВобравши\b", "Вобравшей"),
-    (r"\bвсих я\b", "В чьих я"),
-    (r"\bСдаль\b", "Вдаль"),
-    (r"\bВздаль\b", "Вдаль"),
-    (r"\bвздаль\b", "вдаль"),
-    (r"\bСдаи\b", "Вдаль"),
-    (r"\bМик\b", "Миг"),
-    (r"\bшпирения\b", "смирения"),
-    (r"\bнавесы\b", "на весы"),
-    (r"\bНо оставить твой сейчас\b", "Но настанет твой час"),
-    (r"\bно оставим твой час\b", "но настанет твой час"),
-    (r"\bно оставит твой час\b", "но настанет твой час"),
-    (r"\bНе сядь вдаль\b", "Несясь вдаль"),
-    (r"\bдает\b", "даёт"),
-    (r"\bвперед\b", "вперёд"),
-    (r"\bждет\b", "ждёт"),
-    (r"\bТа что\b", "Та, что"),
-    (r"\bВсё что\b", "Всё, что"),
-    (r"\bМиг когда\b", "Миг, когда"),
-    (r"\bВ час когда\b", "В час, когда"),
-    (r"\bВ сих я\b", "В чьих я"),
-    (r"\bсих\b", "чьих"),
-    (r"\bСкоре\b", "Вскоре"),
-    (r"\bЗдай\b", "Вдаль"),
-    (r"\bСдай\b", "Вдаль"),
-    (r"\bнас сносят его руки\b", "нас уносят его ручьи"),
-    (r"\bНас сносят его руки\b", "Нас уносят его ручьи"),
-    (r"\bНас уносят его руки\b", "Нас уносят его ручьи"),
-    (r"\bНо оставим твой час\b", "Но настанет твой час"),
-    (r"\bВдаль И оно\b", "Вдаль. И оно"),
-    (r"\bпородила\b", "породило"),
-    (r"\bпоставить на весы\b", "Что поставить на весы"),
-    (r"\bон никогда не ждёт\b", "и оно никогда не ждёт"),
-    (r"\bкогда замрут часы\b", "когда замрут часы?"),
-    (r"\bкогда застан врасплох\b", "когда застан врасплох?"),
-    (r"\bКто -то\b", "Кто-то"),
-    (r"\bкто -то\b", "кто-то"),
-]
+def load_corrections(out_dir: Path):
+    """Per-track ASR fixes live next to the track, not in this generic tool."""
+    path = out_dir / "corrections.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [(str(x["pattern"]), str(x["repl"])) for x in data.get("corrections", [])]
+    except Exception as exc:
+        log(f"  warning: could not read {path}: {exc}")
+        return []
 
 
 def log(*args):
@@ -302,13 +272,33 @@ def split_lines(segments):
     return out
 
 
-def apply_corrections(lines):
+def apply_corrections(lines, corrections):
     for line in lines:
-        for pattern, repl in CORRECTIONS:
+        for pattern, repl in corrections:
             line["text"] = re.sub(pattern, repl, line["text"])
             for w in line["words"]:
                 w["text"] = re.sub(pattern, repl, w["text"])
     return lines
+
+
+def lyrics_report(lines, lyrics_path):
+    """Warn when generated lines do not resemble the supplied reference text."""
+    if not lyrics_path:
+        return
+    path = Path(lyrics_path)
+    if not path.exists():
+        return
+    official = [x.strip() for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    if not official:
+        return
+    norm = lambda s: re.sub(r"[^\wа-яё]+", " ", s.lower(), flags=re.IGNORECASE).strip()
+    weak = 0
+    for i, line in enumerate(lines):
+        best = max((difflib.SequenceMatcher(None, norm(line["text"]), norm(o)).ratio() for o in official), default=0)
+        if best < 0.45:
+            weak += 1
+            log(f"  warning: line {i} is unlike the reference: {line['text']}")
+    log(f"  lyrics check: {len(lines) - weak}/{len(lines)} lines resemble the reference")
 
 
 def fix_word_specials(lines):
@@ -462,8 +452,9 @@ def ingest(args):
     segments = transcribe(src, args.model, args.language)
     lines = split_lines(segments)
     lines = merge_short_lines(lines)
-    lines = apply_corrections(lines)
+    lines = apply_corrections(lines, load_corrections(out_dir))
     lines = fix_word_specials(lines)
+    lyrics_report(lines, args.lyrics)
     if not lines:
         raise SystemExit("no lyric lines found")
     first_line = lines[0]["t0"]
@@ -564,7 +555,7 @@ def self_test():
     log("self-test notes:", got, f"({time.time()-t0:.1f}s)")
     assert len(got) >= 3, got
     for want, g in zip([57, 60, 64], got[:3]):
-        assert abs(want - g) <= 1, (want, g)
+        assert abs(want - g) <= 0, (want, g)
     log("self-test ok")
 
 
@@ -575,7 +566,7 @@ def main():
     ap.add_argument("--artist")
     ap.add_argument("--slug")
     ap.add_argument("--order", type=int, default=999)
-    ap.add_argument("--lyrics")
+    ap.add_argument("--lyrics", help="reference lyrics text; copied into the track folder and used for a QA warning, text is still proofread manually")
     ap.add_argument("--language", default="ru")
     ap.add_argument("--model", default="medium")
     ap.add_argument("--force", action="store_true")

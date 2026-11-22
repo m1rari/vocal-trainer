@@ -254,7 +254,7 @@
           <span class="songs-hint">Новую песню пришли в чат — я разберу вокал и добавлю сюда.</span>
         </div>
         <div class="song-list" id="songList"></div>
-        <div class="songs-empty" id="songsEmpty" hidden>
+        <div class="songs-empty" id="songsEmpty" role="status" aria-live="polite" hidden>
           <div class="songs-empty-mark" aria-hidden="true">♪</div>
           <p>Пока нет песен.</p>
           <p class="card-note">Пришли MP3 в чат — я разберу вокал и добавлю песню в список.</p>
@@ -300,13 +300,13 @@
             <svg class="ic-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h4v16H7zM14 4h4v16h-4z" fill="currentColor"/></svg>
           </button>
           <span class="karaoke-time" id="karaokeTime">0:00 / 0:00</span>
-          <div class="karaoke-progress" id="karaokeProgress" role="slider" aria-label="Перемотка" tabindex="0">
+          <div class="karaoke-progress" id="karaokeProgress" role="slider" aria-label="Перемотка" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0">
             <div class="karaoke-progress-fill" id="karaokeProgressFill"></div>
           </div>
-          <button class="btn btn-sm" id="karaokeLoop">Фраза</button>
-          <button class="btn btn-sm" id="karaokeSpeed">1×</button>
-          <button class="btn btn-sm" id="karaokeGuide">Поводырь</button>
-          <button class="btn btn-sm" id="karaokeMic">Микрофон</button>
+          <button class="btn btn-sm" id="karaokeLoop" aria-pressed="false">Фраза</button>
+          <button class="btn btn-sm" id="karaokeSpeed" aria-pressed="false">1×</button>
+          <button class="btn btn-sm" id="karaokeGuide" aria-pressed="false">Поводырь</button>
+          <button class="btn btn-sm" id="karaokeMic" aria-pressed="false">Микрофон</button>
           <button class="btn btn-sm" id="karaokeResult">Итог</button>
         </div>
 
@@ -317,7 +317,7 @@
           <p class="card-note">Для честного счёта лучше наушники: с колонками микрофон может слышать оригинал.</p>
         </div>
 
-        <div class="karaoke-results" id="karaokeResults" hidden>
+        <div class="karaoke-results" id="karaokeResults" role="region" aria-label="Итог" tabindex="-1" hidden>
           <div class="karaoke-results-head">
             <b>Итог</b>
             <button class="btn btn-ghost" id="karaokeResultsClose" aria-label="Закрыть">×</button>
@@ -327,7 +327,7 @@
         </div>
 
         <audio id="songAudio" preload="auto"></audio>
-        <audio id="guideAudio" preload="auto"></audio>
+        <audio id="guideAudio" preload="none"></audio>
       </section>
     </main>
 

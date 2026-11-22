@@ -73,7 +73,7 @@ Expected: `ReferenceError` / `KaraokeCore is not defined`.
 
 - [ ] **Step 3: Implement `karaoke-core.js`**
 
-Implement the API above. Use binary search for `lineAt`/`wordAt`; `noteAt` returns `null` inside the guard window and for `conf < 0.6`. `addFrame` counts a frame whenever a note+line exists, increments `voiced` only when `userMidi != null`, and `inTune` only within 50 cents. `finalizeAttempt` stores `{...stat, score: inTune/frames, voicedRatio, avgAbs}` only when the new score is strictly higher. `overall` weights by `frames`.
+Implement the API above. Use binary search for `lineAt`/`wordAt`; `noteAt` returns `null` inside the guard window and for `conf < 0.2` (calibrated to the real pyin output). `addFrame` counts a frame whenever a note+line exists, increments `voiced` only when `userMidi != null`, and `inTune` only within 50 cents. `finalizeAttempt` stores `{...stat, score: inTune/frames, voicedRatio, avgAbs}`; attempts shorter than 6 frames are `fragment` and never replace a solid attempt. `overall` weights by `frames` and counts only scorable lines.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -381,11 +381,11 @@ git commit -m "feat: add karaoke guide track and settings"
 
 **Interfaces:**
 - Consumes: existing service worker.
-- Produces: cache version `vt-v5`; runtime cache for `/tracks/`.
+- Produces: cache version `vt-v7`; runtime cache for `/tracks/`.
 
 - [ ] **Step 1: Service worker**
 
-Bump `VERSION` to `vt-v5`; add `karaoke-core.js`, `karaoke.js`, `tracks/index.json` to `ASSETS`. Add a `/tracks/` cache-first branch that stores responses. Keep the app-shell network-first branch.
+Bump `VERSION` to `vt-v7`; add `karaoke-core.js`, `karaoke.js`, `tracks/index.json` to `ASSETS`. Add a `/tracks/` Range-aware cache for audio/guide, network-first for track JSON, and cache fallback for navigation. Keep the app-shell network-first branch.
 
 - [ ] **Step 2: Responsive 5 tabs**
 
