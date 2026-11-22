@@ -49,6 +49,7 @@
     speed: 1,
     guideOn: false,
     micOn: false,
+    syncMs: 0,
     trail: [],
     lastT: 0,
     viewTime: 0,
@@ -241,6 +242,7 @@
 
   function showLibrary() {
     pause();
+    if (state.micOn && window.__vt) window.__vt.stopMic();
     ui.karaoke.hidden = true;
     ui.library.hidden = false;
     history.replaceState(null, '', '?tab=songs');
@@ -388,6 +390,32 @@
     state.raf = requestAnimationFrame(tick);
   }
 
+  function onMicFrame(f) {
+    if (!state.track) return;
+    const t = (state.playing ? ui.song.currentTime : state.viewTime) - state.syncMs / 1000;
+    if (!state.playing) {
+      updateTuner(t, f.midi);
+      return;
+    }
+    if (f.midi == null) {
+      updateTuner(t, null);
+      return;
+    }
+    pushPitch(f.midi, t, true);
+  }
+
+  async function toggleMic() {
+    if (!window.__vt || !window.__vt.startMic) return;
+    if (state.micOn) {
+      window.__vt.stopMic();
+      return;
+    }
+    ui.micBtn.disabled = true;
+    const ok = await window.__vt.startMic('songs', onMicFrame);
+    ui.micBtn.disabled = false;
+    if (!ok) setTuner(null, 'Нет доступа к микрофону', 'Разреши микрофон в настройках браузера');
+  }
+
   function setTuner(cents, status, detail, cls) {
     const needle = $('karaokeNeedle');
     if (needle) {
@@ -437,6 +465,7 @@
     state.trail.push({ t, v, ok, cents, now, playing: !!playing });
     const cutoff = t - 10;
     while (state.trail.length && state.trail[0].t < cutoff) state.trail.shift();
+    while (state.trail.length > 500) state.trail.shift();
     updateTuner(t, midi);
   }
 
@@ -607,11 +636,37 @@
     else if (e.code === 'ArrowRight') { e.preventDefault(); seek(ui.song.currentTime + 5); }
   };
 
+  K.onMicStarted = () => {
+    state.micOn = true;
+    state.trail.length = 0;
+    ui.micBtn.textContent = 'Микрофон вкл';
+    ui.micBtn.classList.add('on');
+    setTuner(null, 'Спой', 'Пой вместе с вокалом');
+    ui.micBtn.disabled = false;
+  };
+  K.onMicStopped = () => {
+    state.micOn = false;
+    ui.micBtn.textContent = 'Микрофон';
+    ui.micBtn.classList.remove('on');
+    ui.micBtn.disabled = false;
+    setTuner(null, 'Включи микрофон', '');
+    state.trail.length = 0;
+    drawLane();
+  };
+  K.onMicError = () => {
+    state.micOn = false;
+    ui.micBtn.textContent = 'Микрофон';
+    ui.micBtn.classList.remove('on');
+    ui.micBtn.disabled = false;
+    setTuner(null, 'Нет доступа к микрофону', 'Разреши микрофон в настройках браузера');
+  };
+
   K.open = openTrack;
   K.showLibrary = showLibrary;
+  K.toggleMic = toggleMic;
   K.getState = () => ({ state, manifest });
   K.debug = {
-    seek, play, pause, open: openTrack, state, drawLane,
+    seek, play, pause, open: openTrack, state, drawLane, frame: onMicFrame,
     pushPitch: (midi, t) => {
       if (t != null) state.viewTime = t;
       pushPitch(midi, state.viewTime, state.playing);
@@ -621,6 +676,7 @@
 
   ui.back?.addEventListener('click', showLibrary);
   ui.play?.addEventListener('click', togglePlay);
+  ui.micBtn?.addEventListener('click', toggleMic);
   ui.progress?.addEventListener('click', e => {
     if (!state.track) return;
     const r = ui.progress.getBoundingClientRect();

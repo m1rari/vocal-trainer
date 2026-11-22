@@ -606,7 +606,8 @@
     return sr / (p + shift);
   }
 
-  async function startMic() {
+  async function startMic(consumer = 'mic', onFrame = null) {
+    if (mic) stopMic();
     let mctx = null;
     try {
       // Own context at the device's native rate: an iPhone garbles microphone audio
@@ -622,29 +623,47 @@
       const analyser = mctx.createAnalyser();
       analyser.fftSize = 4096;
       src.connect(analyser);
-      mic = { ctx: mctx, stream, src, analyser, buf: new Float32Array(analyser.fftSize), bytes: null, raf: 0 };
-      el.micToggle.textContent = 'Выключить микрофон';
-      el.micToggle.classList.add('on');
-      resetHold();
-      micUi(null, isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
+      mic = {
+        ctx: mctx, stream, src, analyser, buf: new Float32Array(analyser.fftSize),
+        bytes: null, raf: 0, consumer, onFrame,
+      };
+      if (consumer === 'mic') {
+        el.micToggle.textContent = 'Выключить микрофон';
+        el.micToggle.classList.add('on');
+        resetHold();
+        micUi(null, isFree() ? 'Спой любую ноту' : 'Спой ноту', ' ');
+      } else {
+        window.Karaoke?.onMicStarted?.();
+      }
       micLast = performance.now();
       mic.raf = requestAnimationFrame(micTick);
+      return true;
     } catch (e) {
       if (mctx) try { mctx.close(); } catch (e2) {}
-      el.micStatus.textContent = 'Нет доступа к микрофону';
-      el.micDetail.textContent = 'Разреши доступ в настройках браузера и попробуй ещё раз.';
+      if (consumer === 'mic') {
+        el.micStatus.textContent = 'Нет доступа к микрофону';
+        el.micDetail.textContent = 'Разреши доступ в настройках браузера и попробуй ещё раз.';
+      } else {
+        window.Karaoke?.onMicError?.(e);
+      }
+      return false;
     }
   }
   function stopMic() {
     if (!mic) return;
+    const consumer = mic.consumer;
     cancelAnimationFrame(mic.raf);
     mic.stream.getTracks().forEach(t => t.stop());
     try { mic.src.disconnect(); mic.ctx.close(); } catch (e) {}
     mic = null;
-    el.micToggle.textContent = 'Включить микрофон';
-    el.micToggle.classList.remove('on');
-    el.level.style.width = '0%';
-    micUi(null, 'Включи микрофон и спой ноту', ' ');
+    if (consumer === 'mic') {
+      el.micToggle.textContent = 'Включить микрофон';
+      el.micToggle.classList.remove('on');
+      el.level.style.width = '0%';
+      micUi(null, 'Включи микрофон и спой ноту', ' ');
+    } else {
+      window.Karaoke?.onMicStopped?.();
+    }
   }
   function readMic() {
     const a = mic.analyser;
@@ -689,11 +708,17 @@
     const buf = readMic();
     let peak = 0;
     for (let i = 0; i < buf.length; i += 4) { const a = Math.abs(buf[i]); if (a > peak) peak = a; }
+    if (mic.consumer === 'songs') {
+      const f = detectPitch(buf, mic.ctx.sampleRate);
+      const midi = f > 0 ? 69 + 12 * Math.log2(f / 440) : null;
+      mic.onFrame?.({ freq: f, midi, rms: peak, dt, now });
+      return;
+    }
     el.level.style.width = Math.min(100, Math.sqrt(peak) * 130) + '%';
     if (micDone) { drawGraph(now); return; }
     const playing = !audio.paused && !audio.ended;
     if (playing && !S.micLive) {          // optional: ignore the mic while our own note sounds
-      micUi(null, 'Слушай…', ' ');
+      micUi(null, 'Слушай…', ' ');
       resetHold();
       drawGraph(now);
       return;
@@ -926,7 +951,10 @@
   const wantsTab = new URLSearchParams(location.search).get('tab');
   setTab(wantsTab in TITLES ? wantsTab : (S.tab in TITLES ? S.tab : 'notes'));
 
-  window.__vt = { detectPitch, handlePitch, trail, pcm, loopOf, get SR() { return SR; }, audio };
+  window.__vt = {
+    detectPitch, handlePitch, trail, pcm, loopOf, startMic, stopMic,
+    get SR() { return SR; }, audio,
+  };
 
   loadSamples()
     .then(() => {
