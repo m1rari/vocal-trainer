@@ -74,6 +74,17 @@
     return `${m}:${String(sec).padStart(2, '0')}`;
   };
 
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const noteName = m => NOTE_NAMES[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
+
+  function distText(cents) {
+    const a = Math.abs(cents) / 100;
+    if (a < 0.75) return `${Math.round(Math.abs(cents))} центов`;
+    const half = Math.round(a * 2) / 2;
+    return `${String(half).replace('.', ',')} полутона`;
+  }
+
   function initials(t) {
     const a = (t.artist || '').trim();
     const title = (t.title || '').trim();
@@ -289,8 +300,10 @@
     }
     state.lastLine = -2;
     state.lastWord = -2;
+    state.trail.length = 0;
     updateProgress(v);
     updateLyrics(v);
+    setTuner(null, state.micOn ? 'Слушай…' : 'Включи микрофон', '');
     drawLane();
   }
 
@@ -375,7 +388,59 @@
     state.raf = requestAnimationFrame(tick);
   }
 
-  // ---------- pitch lane (filled in task 5) ----------
+  function setTuner(cents, status, detail, cls) {
+    const needle = $('karaokeNeedle');
+    if (needle) {
+      if (cents == null) {
+        needle.style.opacity = '0';
+      } else {
+        needle.style.opacity = '1';
+        needle.style.left = (50 + clamp(cents, -100, 100) / 2) + '%';
+      }
+    }
+    setStatus(status, cls);
+    const d = $('karaokeDetail');
+    if (d) d.textContent = detail || '\u00a0';
+  }
+
+  function updateTuner(t, midi) {
+    if (!state.track) return;
+    const note = C.noteAt(state.track, t);
+    if (midi == null) {
+      setTuner(null, state.micOn ? 'Слушай…' : 'Включи микрофон', state.micOn ? 'Пой вместе с вокалом' : 'Разреши микрофон, чтобы видеть попадание');
+      return;
+    }
+    if (!note) {
+      setTuner(null, 'Слушай…', `Ты поёшь: ${noteName(midi)}`);
+      return;
+    }
+    const cents = C.centsBetween(midi, note.midi);
+    const detail = `Цель: ${noteName(note.midi)} · ты: ${noteName(midi)}`;
+    if (Math.abs(cents) <= 25) setTuner(cents, 'Чисто ✓', detail, 'ok');
+    else if (Math.abs(cents) <= 50) setTuner(cents, 'Попал, держи', detail, 'ok');
+    else if (cents < 0) setTuner(cents, `Ниже на ${distText(cents)} — тяни вверх ↑`, detail, 'off');
+    else setTuner(cents, `Выше на ${distText(cents)} — тяни вниз ↓`, detail, 'off');
+  }
+
+  function pushPitch(midi, t, playing) {
+    if (midi == null) return;
+    const note = state.track ? C.noteAt(state.track, t) : null;
+    let v = midi;
+    let ok = false;
+    let cents = null;
+    if (note) {
+      cents = C.centsBetween(midi, note.midi);
+      v = note.midi + C.foldOctave(midi - note.midi);
+      ok = Math.abs(cents) <= 50;
+    }
+    const now = performance.now();
+    state.trail.push({ t, v, ok, cents, now, playing: !!playing });
+    const cutoff = t - 10;
+    while (state.trail.length && state.trail[0].t < cutoff) state.trail.shift();
+    updateTuner(t, midi);
+  }
+
+  // ---------- pitch lane ----------
   function drawLane() {
     const cv = ui.lane;
     if (!cv || !state.track) return;
@@ -398,6 +463,7 @@
     const padR = 10;
     const x = tt => padL + (w - padL - padR) * ((tt - t0) / (t1 - t0));
     const notes = state.track.notes.filter(n => n.t1 >= t0 && n.t0 <= t1);
+    const active = C.noteAt(state.track, t);
     let lo = 60;
     let hi = 72;
     if (notes.length) {
@@ -422,13 +488,13 @@
       }
     }
 
-    g.fillStyle = 'rgba(216,172,99,.30)';
     for (const n of notes) {
       const x0 = Math.max(padL, x(n.t0));
       const x1 = Math.min(w - padR, x(n.t1));
       if (x1 <= x0) continue;
       const yy = y(n.midi);
       const hh = Math.max(5, Math.min(12, (h - 28) / (hi - lo) * 0.55));
+      g.fillStyle = n === active ? 'rgba(235,201,140,.82)' : 'rgba(216,172,99,.30)';
       g.beginPath();
       if (g.roundRect) g.roundRect(x0, yy - hh / 2, x1 - x0, hh, 3);
       else g.rect(x0, yy - hh / 2, x1 - x0, hh);
@@ -448,6 +514,44 @@
       if (!started) { g.moveTo(xx, yy); started = true; } else g.lineTo(xx, yy);
     }
     g.stroke();
+
+    // live voice trail
+    if (state.trail.length) {
+      g.lineWidth = 3;
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      for (let i = 1; i < state.trail.length; i++) {
+        const a = state.trail[i - 1];
+        const b = state.trail[i];
+        if (a.v == null || b.v == null) continue;
+        if (b.t < t0 || a.t > t1 || b.now - a.now > 400) continue;
+        g.strokeStyle = b.ok ? '#7bd3a6' : '#d8ac63';
+        g.beginPath();
+        g.moveTo(x(a.t), clamp(y(a.v), 3, h - 3));
+        g.lineTo(x(b.t), clamp(y(b.v), 3, h - 3));
+        g.stroke();
+      }
+      const tip = state.trail[state.trail.length - 1];
+      if (tip && tip.v != null && t1 >= tip.t && tip.t >= t0) {
+        const tx = x(tip.t);
+        const ty = clamp(y(tip.v), 6, h - 6);
+        g.fillStyle = tip.ok ? '#7bd3a6' : '#d8ac63';
+        g.beginPath();
+        g.arc(tx, ty, 6, 0, Math.PI * 2);
+        g.fill();
+        if (!tip.ok && active) {
+          const up = tip.v < active.midi;
+          const s = up ? -1 : 1;
+          const ay = ty + s * 12;
+          g.beginPath();
+          g.moveTo(tx, ay + s * 9);
+          g.lineTo(tx - 6, ay);
+          g.lineTo(tx + 6, ay);
+          g.closePath();
+          g.fill();
+        }
+      }
+    }
 
     // playhead
     const px = x(t);
@@ -506,7 +610,14 @@
   K.open = openTrack;
   K.showLibrary = showLibrary;
   K.getState = () => ({ state, manifest });
-  K.debug = { seek, play, pause, open: openTrack, state };
+  K.debug = {
+    seek, play, pause, open: openTrack, state, drawLane,
+    pushPitch: (midi, t) => {
+      if (t != null) state.viewTime = t;
+      pushPitch(midi, state.viewTime, state.playing);
+      drawLane();
+    },
+  };
 
   ui.back?.addEventListener('click', showLibrary);
   ui.play?.addEventListener('click', togglePlay);
