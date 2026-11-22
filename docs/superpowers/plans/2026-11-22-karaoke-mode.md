@@ -26,7 +26,7 @@
 
 ## Review Focus
 
-- **Mic hears the reference vocal from speakers.** A loud reference must not make the score look perfect. Test that the headphone hint appears and that muting the vocal removes reference bleed.
+- **Mic hears the reference vocal from speakers.** v1 relies on echo cancellation plus a headphone hint/warning; it does not detect bleed automatically. Test that the hint appears, that muting the vocal removes reference bleed, and that scoring is usable with headphones.
 - **User sings an octave lower.** The trail and tuner must fold the octave, display “на октаву ниже”, and still score in tune.
 - **Long instrumental gaps and intros.** A five-minute track with a 17-second intro and 24-second gaps must show “Вступление/Проигрыш”, not a blank line or a crash.
 - **Seeking, looping and restarting.** Repeating a phrase must keep the best result, must not double-count frames, and must not zero unplayed lines.
